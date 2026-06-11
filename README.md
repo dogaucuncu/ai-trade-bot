@@ -210,15 +210,18 @@ AI-Trade-Bot/
 
 ### Gereksinimler
 
-- **Python** 3.11 veya üzeri
-- **pip** paket yöneticisi
-- **Git** versiyon kontrol sistemi
-- **Redis** (opsiyonel — caching/pub-sub için)
+| Araç | Versiyon | Zorunlu mu? | İndirme |
+|------|---------|:-----------:|--------|
+| **Python** | 3.11+ | ✅ Evet | [python.org](https://www.python.org/downloads/) |
+| **pip** | Son sürüm | ✅ Evet | Python ile birlikte gelir |
+| **Git** | 2.40+ | ✅ Evet | [git-scm.com](https://git-scm.com/download/win) |
+| **Redis** | 7.0+ | ❌ Opsiyonel | [redis.io](https://redis.io/downloads/) |
+| **NVIDIA CUDA** | 11.8+ | ❌ Opsiyonel | [developer.nvidia.com](https://developer.nvidia.com/cuda-downloads) |
 
 ### 1. Repoyu Klonlayın
 
 ```bash
-git clone https://github.com/KULLANICI_ADINIZ/ai-trade-bot.git
+git clone https://github.com/dogaucuncu/ai-trade-bot.git
 cd ai-trade-bot
 ```
 
@@ -240,9 +243,33 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-> **Not:** PyTorch GPU desteği için [pytorch.org](https://pytorch.org/get-started/locally/) adresinden CUDA sürümünüze uygun komutu kullanın.
+> **PyTorch GPU Desteği (Opsiyonel):**
+> Eğer NVIDIA GPU'nuz varsa, LSTM model eğitimi çok daha hızlı olur.
+> [pytorch.org](https://pytorch.org/get-started/locally/) adresinden CUDA sürümünüze uygun komutu kullanın.
+> ```bash
+> # Örnek: CUDA 11.8 için
+> pip install torch --index-url https://download.pytorch.org/whl/cu118
+> ```
+> GPU yoksa PyTorch otomatik olarak CPU modunda çalışır.
 
-### 4. Ortam Değişkenlerini Ayarlayın
+### 4. Redis Kurulumu (Opsiyonel)
+
+Redis, caching ve pub-sub için kullanılır. Bot Redis olmadan da çalışır.
+
+```bash
+# Windows (WSL veya Docker ile)
+docker run -d --name redis -p 6379:6379 redis:latest
+
+# Linux
+sudo apt install redis-server
+sudo systemctl start redis
+
+# macOS
+brew install redis
+brew services start redis
+```
+
+### 5. Ortam Değişkenlerini Ayarlayın
 
 ```bash
 # .env.example dosyasını kopyalayın
@@ -259,20 +286,69 @@ nano config/.env       # Linux/macOS
 
 Tüm ayarlar `config/.env` dosyasından yüklenir. Önemli parametreler:
 
+### Genel Ayarlar
+
 | Parametre | Varsayılan | Açıklama |
 |-----------|-----------|----------|
 | `TRADING_MODE` | `paper` | `paper` (simülasyon) veya `live` (gerçek) |
 | `INITIAL_CAPITAL` | `50.0` | Başlangıç sermayesi (USD) |
 | `CRYPTO_ALLOCATION` | `0.75` | Kripto'ya ayrılan oran (%75) |
 | `STOCK_ALLOCATION` | `0.25` | Hisse senedine ayrılan oran (%25) |
-| `BINANCE_API_KEY` | — | Binance API anahtarı |
-| `BINANCE_SECRET_KEY` | — | Binance gizli anahtar |
-| `BINANCE_TESTNET` | `true` | Testnet kullanımı |
-| `ALPACA_API_KEY` | — | Alpaca API anahtarı |
-| `ALPACA_SECRET_KEY` | — | Alpaca gizli anahtar |
-| `ALPACA_PAPER` | `true` | Paper trading modu |
 | `LOG_LEVEL` | `INFO` | Log seviyesi (DEBUG/INFO/WARNING/ERROR) |
 | `DASHBOARD_PORT` | `8000` | Dashboard port numarası |
+
+### 🔑 API Anahtarları (Zorunlu)
+
+#### Binance API Key Alma
+
+| Parametre | Açıklama |
+|-----------|----------|
+| `BINANCE_API_KEY` | Binance API anahtarı |
+| `BINANCE_SECRET_KEY` | Binance gizli anahtar |
+| `BINANCE_TESTNET` | `true` = testnet (önerilen), `false` = gerçek hesap |
+
+**Adımlar:**
+1. [binance.com](https://www.binance.com/en/register) adresinden hesap oluşturun
+2. Kimlik doğrulaması (KYC) yapın
+3. **Testnet için (önerilen):** [testnet.binance.vision](https://testnet.binance.vision/) → GitHub ile giriş → API key oluşturun
+4. **Gerçek hesap için:** Binance → Hesap → API Yönetimi → API Oluştur
+5. API izinlerinde sadece **"Spot Trading"** ve **"Read"** izinlerini açın
+6. ⚠️ **"Withdrawal"** iznini asla açmayın!
+
+#### Alpaca API Key Alma
+
+| Parametre | Açıklama |
+|-----------|----------|
+| `ALPACA_API_KEY` | Alpaca API anahtarı |
+| `ALPACA_SECRET_KEY` | Alpaca gizli anahtar |
+| `ALPACA_PAPER` | `true` = paper trading (önerilen), `false` = gerçek |
+
+**Adımlar:**
+1. [alpaca.markets](https://alpaca.markets/docs/trading/getting_started/) adresinden ücretsiz hesap oluşturun
+2. Dashboard'a giriş yapın → Sol menüde **"Paper Trading"** seçin
+3. **API Keys** bölümünden **"Generate New Key"** tıklayın
+4. `API Key ID` ve `Secret Key` değerlerini kopyalayın
+5. ⚠️ Secret key sadece bir kez gösterilir, kaydetmeyi unutmayın!
+
+> **Not:** Alpaca yalnızca ABD hisse senetlerini destekler. ABD dışından kullanım için bazı kısıtlamalar olabilir.
+
+### 📧 SMTP E-posta Bildirimleri (Opsiyonel)
+
+| Parametre | Varsayılan | Açıklama |
+|-----------|-----------|----------|
+| `SMTP_HOST` | `smtp.gmail.com` | SMTP sunucu adresi |
+| `SMTP_PORT` | `587` | SMTP port (TLS) |
+| `SMTP_USERNAME` | — | E-posta adresiniz |
+| `SMTP_PASSWORD` | — | Uygulama şifresi (Gmail App Password) |
+| `SMTP_FROM` | — | Gönderici e-posta adresi |
+| `SMTP_TO` | — | Alıcı e-posta adresi |
+
+**Gmail Uygulama Şifresi Alma:**
+1. [myaccount.google.com](https://myaccount.google.com/) → Güvenlik
+2. **"2 Adımlı Doğrulama"** aktif olmalı
+3. Güvenlik → **"Uygulama Şifreleri"** → Uygulama seçin: "Posta" → Cihaz: "Diğer" → "AI Trade Bot" yazın
+4. Oluşturulan 16 haneli şifreyi `SMTP_PASSWORD` olarak girin
+5. ⚠️ Normal Gmail şifrenizi değil, uygulama şifresini kullanın!
 
 ### Risk Parametreleri (Hardcoded — `config/settings.py`)
 
