@@ -16,6 +16,9 @@ if not exist "venv\Scripts\python.exe" (
 
 :: Run the bot
 echo [INFO] Launching the bot engine...
+echo [INFO] Opening dashboard in your default browser...
+timeout /t 3 /nobreak >nul
+start http://127.0.0.1:8000
 echo.
 .\venv\Scripts\python.exe main.py
 
