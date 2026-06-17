@@ -28,6 +28,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    delete,
     select,
 )
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -107,6 +108,55 @@ class Signal(Base):
         return (
             f"<Signal {self.signal_type.upper()} {self.symbol} "
             f"conf={self.confidence:.2f}>"
+        )
+
+
+class EquitySnapshot(Base):
+    """Point-in-time equity/balance snapshot for the live/paper run.
+
+    Recording these lets us reconstruct an equity curve and compute honest
+    performance metrics over a paper-trading session (see
+    ``backtest.metrics.PerformanceReport``).
+    """
+
+    __tablename__ = "equity_snapshots"
+
+    id: int = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp: dt.datetime = Column(DateTime, nullable=False, index=True)
+    equity: float = Column(Float, nullable=False)            # balance + unrealised
+    balance: float = Column(Float, nullable=False)           # realised cash
+    daily_pnl: float = Column(Float, nullable=False, default=0.0)
+    open_positions: int = Column(Integer, nullable=False, default=0)
+    mode: str = Column(String(10), nullable=False, default="paper")  # paper|live
+
+    def __repr__(self) -> str:
+        return f"<EquitySnapshot {self.timestamp} eq={self.equity:.2f}>"
+
+
+class OpenPosition(Base):
+    """Currently-open position, persisted so a restart can recover state.
+
+    Rows are inserted when a position opens and deleted when it closes, so
+    the table always reflects the live set of open positions.
+    """
+
+    __tablename__ = "open_positions"
+
+    position_id: str = Column(String(40), primary_key=True)
+    symbol: str = Column(String(30), nullable=False, index=True)
+    side: str = Column(String(4), nullable=False)            # BUY | SELL
+    entry_price: float = Column(Float, nullable=False)
+    quantity: float = Column(Float, nullable=False)
+    stop_loss: float = Column(Float, nullable=False)
+    take_profit: float = Column(Float, nullable=False)
+    entry_time: dt.datetime = Column(DateTime, nullable=False)
+    strategy: str = Column(String(60), nullable=False, default="manual")
+    value_usd: float = Column(Float, nullable=False, default=0.0)
+
+    def __repr__(self) -> str:
+        return (
+            f"<OpenPosition {self.side} {self.quantity} {self.symbol} "
+            f"@ {self.entry_price}>"
         )
 
 
@@ -372,3 +422,130 @@ class Storage:
             confidence,
         )
         return sig_id
+
+    # ------------------------------------------------------------------
+    # Equity snapshots
+    # ------------------------------------------------------------------
+
+    async def save_equity_snapshot(
+        self,
+        *,
+        equity: float,
+        balance: float,
+        daily_pnl: float = 0.0,
+        open_positions: int = 0,
+        mode: str = "paper",
+        timestamp: dt.datetime | None = None,
+    ) -> int:
+        """Persist an equity/balance snapshot and return its row id."""
+        snap = EquitySnapshot(
+            timestamp=timestamp or dt.datetime.now(dt.timezone.utc),
+            equity=equity,
+            balance=balance,
+            daily_pnl=daily_pnl,
+            open_positions=open_positions,
+            mode=mode,
+        )
+        async with self._session_factory() as session:
+            session.add(snap)
+            await session.commit()
+            snap_id: int = snap.id
+        return snap_id
+
+    async def get_equity_curve(
+        self,
+        limit: int = 100_000,
+        since: Optional[dt.datetime] = None,
+    ) -> list[dict]:
+        """Return equity snapshots in chronological order."""
+        stmt = select(EquitySnapshot).order_by(EquitySnapshot.timestamp.asc()).limit(limit)
+        if since is not None:
+            stmt = stmt.where(EquitySnapshot.timestamp >= since)
+
+        async with self._session_factory() as session:
+            result = await session.execute(stmt)
+            rows: Sequence[EquitySnapshot] = result.scalars().all()
+
+        return [
+            {
+                "timestamp": r.timestamp,
+                "equity": r.equity,
+                "balance": r.balance,
+                "daily_pnl": r.daily_pnl,
+                "open_positions": r.open_positions,
+                "mode": r.mode,
+            }
+            for r in rows
+        ]
+
+    # ------------------------------------------------------------------
+    # Open positions (state persistence / recovery)
+    # ------------------------------------------------------------------
+
+    async def save_open_position(
+        self,
+        *,
+        position_id: str,
+        symbol: str,
+        side: str,
+        entry_price: float,
+        quantity: float,
+        stop_loss: float,
+        take_profit: float,
+        entry_time: dt.datetime,
+        strategy: str = "manual",
+        value_usd: float = 0.0,
+    ) -> None:
+        """Insert or replace an open-position row."""
+        async with self._session_factory() as session:
+            # Replace any stale row with the same id (idempotent upsert).
+            await session.execute(
+                delete(OpenPosition).where(OpenPosition.position_id == position_id)
+            )
+            session.add(
+                OpenPosition(
+                    position_id=position_id,
+                    symbol=symbol,
+                    side=side,
+                    entry_price=entry_price,
+                    quantity=quantity,
+                    stop_loss=stop_loss,
+                    take_profit=take_profit,
+                    entry_time=entry_time,
+                    strategy=strategy,
+                    value_usd=value_usd,
+                )
+            )
+            await session.commit()
+        logger.debug("Open position {} persisted ({} {})", position_id, side, symbol)
+
+    async def delete_open_position(self, position_id: str) -> None:
+        """Remove an open-position row once it has been closed."""
+        async with self._session_factory() as session:
+            await session.execute(
+                delete(OpenPosition).where(OpenPosition.position_id == position_id)
+            )
+            await session.commit()
+        logger.debug("Open position {} removed", position_id)
+
+    async def get_open_positions(self) -> list[dict]:
+        """Return all persisted open positions (for restart recovery)."""
+        async with self._session_factory() as session:
+            result = await session.execute(select(OpenPosition))
+            rows: Sequence[OpenPosition] = result.scalars().all()
+
+        return [
+            {
+                "position_id": r.position_id,
+                "symbol": r.symbol,
+                "side": r.side,
+                "entry_price": r.entry_price,
+                "quantity": r.quantity,
+                "stop_loss": r.stop_loss,
+                "take_profit": r.take_profit,
+                "entry_time": r.entry_time,
+                "strategy": r.strategy,
+                "value_usd": r.value_usd,
+            }
+            for r in rows
+        ]

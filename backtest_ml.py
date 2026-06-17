@@ -1,3 +1,20 @@
+"""
+DEPRECATED — DO NOT TRUST THE RESULTS OF THIS SCRIPT.
+
+This backtest is misleading for three reasons and is kept only for reference:
+
+1. IN-SAMPLE: it evaluates the model on (largely) the same DOGE/USDT 15m
+   candles the model was trained on, so the model has "seen the answers".
+2. PER-BAR CHURN: it can reverse the position every single candle.
+3. (Historically) it relied on a scaler fit with look-ahead bias.
+
+Use the honest, leak-free walk-forward engine instead:
+
+    venv/Scripts/python.exe -m backtest.walkforward_ml --symbol DOGE/USDT --tf 1h
+
+See backtest/walkforward_ml.py and backtest/metrics.py.
+"""
+
 import asyncio
 import pandas as pd
 from pathlib import Path
@@ -11,6 +28,10 @@ DB_PATH = Path("f:/Trade bot/data/tradebot.db")
 MODEL_DIR = Path("f:/Trade bot/models/DOGE_USDT_15m")
 
 async def main():
+    logger.warning(
+        "DEPRECATED in-sample backtest. Results are NOT trustworthy. "
+        "Use: python -m backtest.walkforward_ml  (see module docstring)."
+    )
     logger.info("Starting ML Futures Backtest on DOGE/USDT (15m)...")
 
     if not DB_PATH.exists():

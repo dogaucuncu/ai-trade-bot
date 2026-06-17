@@ -124,7 +124,9 @@ async def _async_main(settings) -> None:  # noqa: ANN001
     
     engine = BotEngine(
         capital=settings.initial_capital,
-        dry_run=is_dry_run
+        crypto_symbols=list(settings.binance.default_pairs),
+        dry_run=is_dry_run,
+        storage=storage,
     )
     await engine.initialize()
     

@@ -43,6 +43,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+from backtest.metrics import sharpe_ratio as _sharpe_ratio  # noqa: E402
 from src.risk.manager import RiskConfig, RiskManager  # noqa: E402
 from src.risk.position_sizer import PositionSizer  # noqa: E402
 from src.strategy.base import (  # noqa: E402
@@ -792,8 +793,10 @@ class Backtester:
         gross_loss = abs(sum(losses)) if losses else 0.0
         profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else 0.0
 
-        # Sharpe ratio (annualised, assuming daily returns)
-        sharpe = self._calc_sharpe(equity_curve)
+        # Sharpe ratio — annualised with the CORRECT bars-per-year for this
+        # timeframe (the old code hard-coded 365, inflating intraday Sharpe
+        # by up to ~38x on 1m bars).
+        sharpe = self._calc_sharpe(equity_curve, timeframe)
 
         return BacktestResult(
             strategy_name=strategy_name,
@@ -818,9 +821,13 @@ class Backtester:
     @staticmethod
     def _calc_sharpe(
         equity_curve: list[dict[str, Any]],
-        periods_per_year: int = 365,
+        timeframe: str = "1d",
     ) -> float:
-        """Compute annualised Sharpe ratio from an equity curve."""
+        """Annualised Sharpe ratio from an equity curve (timeframe-aware).
+
+        Delegates to :func:`backtest.metrics.sharpe_ratio` so the
+        annualisation factor matches the candle interval actually traded.
+        """
         if len(equity_curve) < 2:
             return 0.0
 
@@ -831,15 +838,7 @@ class Backtester:
             if prev > 0:
                 returns.append((balances[i] - prev) / prev)
 
-        if not returns:
-            return 0.0
-
-        mean_ret = np.mean(returns)
-        std_ret = np.std(returns, ddof=1)
-        if std_ret == 0 or math.isnan(std_ret):
-            return 0.0
-
-        return float(mean_ret / std_ret * math.sqrt(periods_per_year))
+        return _sharpe_ratio(returns, timeframe)
 
     def _save_result(self, result: BacktestResult) -> None:
         """Persist a result to JSON in the results directory."""

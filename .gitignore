@@ -76,6 +76,9 @@ models/**/*.npy
 # ── Backtest Results ──────────────────────────────────────────────────
 backtest/results/*.html
 backtest/results/*.json
+# Scratch run logs/output (prefixed with _)
+backtest/results/_*
+*.out
 
 # ── Jupyter Notebooks ─────────────────────────────────────────────────
 .ipynb_checkpoints/
@@ -130,3 +133,6 @@ $RECYCLE.BIN/
 *.temp
 .gemini/
 graphify-out/
+
+# ── Claude Code ───────────────────────────────────────────────────────
+.claude/settings.local.json

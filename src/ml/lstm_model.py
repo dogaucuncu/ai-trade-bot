@@ -110,77 +110,109 @@ class PricePredictorLSTM(nn.Module):
 # Feature engineering helpers
 # =====================================================================
 
+# STATIONARY feature set.
+#
+# The model previously consumed raw price levels (open/high/low/close,
+# ema_9/21, macd_*, bb_upper/middle/lower, atr_14). Those grow without bound
+# in a trend, so a MinMaxScaler fit on the training window pushes
+# out-of-sample values outside [0, 1] — the LSTM then sees inputs from a
+# distribution it never trained on. Every feature below is a return or a
+# *ratio* and stays in a comparable range across train and test windows.
 _FEATURE_COLUMNS: list[str] = [
-    "open", "high", "low", "close", "volume",
-    "rsi_14",
-    "macd_line", "macd_signal", "macd_histogram",
-    "bb_upper", "bb_middle", "bb_lower", "bb_bandwidth",
-    "ema_9", "ema_21",
-    "atr_14",
-    "volume_ratio",
+    "log_ret_1",          # 1-bar log return
+    "log_ret_3",          # 3-bar log return (short momentum)
+    "hl_range",           # (high - low) / close      — bar volatility
+    "co_ret",             # (close - open) / open      — bar body
+    "upper_wick",         # upper shadow / close
+    "lower_wick",         # lower shadow / close
+    "rsi_norm",           # RSI / 100                  — bounded [0, 1]
+    "macd_norm",          # MACD line / close
+    "macd_hist_norm",     # MACD histogram / close
+    "bb_pband",           # %B position within bands
+    "bb_bandwidth",       # band width / middle
+    "close_ema9_ratio",   # close / EMA9  - 1
+    "ema9_ema21_ratio",   # EMA9  / EMA21 - 1
+    "atr_pct",            # ATR / close                — volatility %
+    "volume_ratio",       # volume / 20-bar avg volume
 ]
 
 
 def _add_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Add lightweight technical features needed by the LSTM.
+    """Build the stationary feature set the LSTM consumes.
 
-    The caller may already have indicator columns from
-    :class:`TechnicalIndicators`; this function fills any gaps.
+    Everything is derived fresh from OHLCV so the result does not depend on
+    whatever indicator columns the caller may already have attached. All
+    outputs are returns or ratios (no raw price levels).
     """
     df = df.copy()
+    close = df["close"]
+    high = df["high"]
+    low = df["low"]
+    open_ = df["open"]
 
-    # -- RSI ---------------------------------------------------------------
-    if "rsi_14" not in df.columns:
-        delta = df["close"].diff()
-        gain = delta.clip(lower=0)
-        loss = -delta.clip(upper=0)
-        avg_gain = gain.ewm(alpha=1 / 14, min_periods=14).mean()
-        avg_loss = loss.ewm(alpha=1 / 14, min_periods=14).mean()
-        rs = avg_gain / avg_loss.replace(0, np.nan)
-        df["rsi_14"] = 100.0 - (100.0 / (1.0 + rs))
+    # -- Returns -----------------------------------------------------------
+    df["log_ret_1"] = np.log(close / close.shift(1))
+    df["log_ret_3"] = np.log(close / close.shift(3))
 
-    # -- MACD --------------------------------------------------------------
-    if "macd_line" not in df.columns:
-        ema12 = df["close"].ewm(span=12, adjust=False).mean()
-        ema26 = df["close"].ewm(span=26, adjust=False).mean()
-        df["macd_line"] = ema12 - ema26
-        df["macd_signal"] = df["macd_line"].ewm(span=9, adjust=False).mean()
-        df["macd_histogram"] = df["macd_line"] - df["macd_signal"]
+    # -- Candle geometry (all normalised by price) ------------------------
+    df["hl_range"] = (high - low) / close.replace(0, np.nan)
+    df["co_ret"] = (close - open_) / open_.replace(0, np.nan)
+    body_top = pd.concat([open_, close], axis=1).max(axis=1)
+    body_bot = pd.concat([open_, close], axis=1).min(axis=1)
+    df["upper_wick"] = (high - body_top) / close.replace(0, np.nan)
+    df["lower_wick"] = (body_bot - low) / close.replace(0, np.nan)
 
-    # -- Bollinger Bands ---------------------------------------------------
-    if "bb_upper" not in df.columns:
-        sma20 = df["close"].rolling(20).mean()
-        std20 = df["close"].rolling(20).std()
-        df["bb_upper"] = sma20 + 2 * std20
-        df["bb_middle"] = sma20
-        df["bb_lower"] = sma20 - 2 * std20
-        df["bb_bandwidth"] = (df["bb_upper"] - df["bb_lower"]) / sma20.replace(
-            0, np.nan
-        )
+    # -- RSI (bounded) -----------------------------------------------------
+    delta = close.diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+    avg_gain = gain.ewm(alpha=1 / 14, min_periods=14).mean()
+    avg_loss = loss.ewm(alpha=1 / 14, min_periods=14).mean()
+    rs = avg_gain / avg_loss.replace(0, np.nan)
+    df["rsi_norm"] = (100.0 - (100.0 / (1.0 + rs))) / 100.0
 
-    # -- EMAs --------------------------------------------------------------
-    if "ema_9" not in df.columns:
-        df["ema_9"] = df["close"].ewm(span=9, adjust=False).mean()
-    if "ema_21" not in df.columns:
-        df["ema_21"] = df["close"].ewm(span=21, adjust=False).mean()
+    # -- MACD (normalised by price) ---------------------------------------
+    ema12 = close.ewm(span=12, adjust=False).mean()
+    ema26 = close.ewm(span=26, adjust=False).mean()
+    macd_line = ema12 - ema26
+    macd_signal = macd_line.ewm(span=9, adjust=False).mean()
+    safe_close = close.replace(0, np.nan)
+    df["macd_norm"] = macd_line / safe_close
+    df["macd_hist_norm"] = (macd_line - macd_signal) / safe_close
 
-    # -- ATR ---------------------------------------------------------------
-    if "atr_14" not in df.columns:
-        tr = pd.concat(
-            [
-                df["high"] - df["low"],
-                (df["high"] - df["close"].shift(1)).abs(),
-                (df["low"] - df["close"].shift(1)).abs(),
-            ],
-            axis=1,
-        ).max(axis=1)
-        df["atr_14"] = tr.ewm(span=14, adjust=False).mean()
+    # -- Bollinger position / width (ratios) ------------------------------
+    sma20 = close.rolling(20).mean()
+    std20 = close.rolling(20).std()
+    bb_upper = sma20 + 2 * std20
+    bb_lower = sma20 - 2 * std20
+    band = (bb_upper - bb_lower).replace(0, np.nan)
+    df["bb_pband"] = (close - bb_lower) / band
+    df["bb_bandwidth"] = (bb_upper - bb_lower) / sma20.replace(0, np.nan)
+
+    # -- EMA ratios --------------------------------------------------------
+    ema9 = close.ewm(span=9, adjust=False).mean()
+    ema21 = close.ewm(span=21, adjust=False).mean()
+    df["close_ema9_ratio"] = close / ema9.replace(0, np.nan) - 1.0
+    df["ema9_ema21_ratio"] = ema9 / ema21.replace(0, np.nan) - 1.0
+
+    # -- ATR as a percentage of price -------------------------------------
+    tr = pd.concat(
+        [
+            high - low,
+            (high - close.shift(1)).abs(),
+            (low - close.shift(1)).abs(),
+        ],
+        axis=1,
+    ).max(axis=1)
+    atr = tr.ewm(span=14, adjust=False).mean()
+    df["atr_pct"] = atr / safe_close
 
     # -- Volume ratio ------------------------------------------------------
-    if "volume_ratio" not in df.columns:
-        vol_sma = df["volume"].rolling(20).mean().replace(0, np.nan)
-        df["volume_ratio"] = df["volume"] / vol_sma
+    vol_sma = df["volume"].rolling(20).mean().replace(0, np.nan)
+    df["volume_ratio"] = df["volume"] / vol_sma
 
+    # Clean up infinities produced by any residual divide-by-zero.
+    df.replace([np.inf, -np.inf], np.nan, inplace=True)
     return df
 
 
@@ -251,6 +283,7 @@ class LSTMPredictor:
         self._scaler: MinMaxScaler = MinMaxScaler()
         self._feature_columns: list[str] = []
         self._is_fitted: bool = False
+        self._class_weights: torch.Tensor | None = None
 
         logger.info(
             "LSTMPredictor initialised (hidden={}, layers={}, device={})",
@@ -314,22 +347,49 @@ class LSTMPredictor:
                 f"Need at least {lookback + 10}."
             )
 
-        # Fit scaler on all data (no look-ahead bias in scaling is a
-        # simplification — acceptable for this scale of project)
-        scaled = self._scaler.fit_transform(feature_df.values)
+        # --- Leak-free scaling -------------------------------------------
+        # The scaler MUST only ever see training data. Fitting it on the
+        # full frame (the old behaviour) leaks the validation set's future
+        # min/max into the model and silently inflates every backtest.
+        #
+        # Sequences are built as X[k] = features[k : k+lookback] with target
+        # labels[k+lookback]. The chronological split happens at `split_idx`
+        # in sequence-space, so the training sequences/labels touch feature
+        # rows up to (split_idx + lookback). We fit the scaler strictly on
+        # those rows, then transform the entire frame with that fit.
+        n_sequences = len(feature_df) - lookback
+        split_idx = int(n_sequences * (1 - val_split))
+        train_row_cutoff = max(lookback, split_idx + lookback)
+
+        self._scaler.fit(feature_df.values[:train_row_cutoff])
+        scaled = self._scaler.transform(feature_df.values)
         self._is_fitted = True
 
         # Build sequences
         X, y = self._build_sequences(scaled, labels.values, lookback)
 
-        # Chronological split
-        split_idx = int(len(X) * (1 - val_split))
+        # Chronological split (sequence-space split index computed above)
         X_train, X_val = X[:split_idx], X[split_idx:]
         y_train, y_val = y[:split_idx], y[split_idx:]
 
         logger.info(
             "Data split — train: {} sequences, val: {} sequences",
             len(X_train), len(X_val),
+        )
+
+        # --- Class weights (combat SIDEWAYS dominance) -------------------
+        # Labels are imbalanced (~46% SIDEWAYS), so an unweighted loss lets
+        # the model collapse to "always predict SIDEWAYS" and never trade.
+        # Inverse-frequency weights push it to respect the rarer UP/DOWN
+        # classes. Computed on TRAIN labels only.
+        counts = np.bincount(y_train, minlength=3).astype(np.float64)
+        counts[counts == 0] = 1.0  # avoid div-by-zero for absent classes
+        inv = counts.sum() / (len(counts) * counts)
+        self._class_weights = torch.FloatTensor(inv)
+        logger.info(
+            "Class counts (UP/DOWN/SIDE)={} weights={}",
+            counts.astype(int).tolist(),
+            [round(float(w), 3) for w in inv],
         )
 
         train_ds = TensorDataset(
@@ -388,7 +448,12 @@ class LSTMPredictor:
             raise RuntimeError("Call prepare_data() before train().")
 
         self._model.train()
-        criterion = nn.CrossEntropyLoss()
+        weight = (
+            self._class_weights.to(self.device)
+            if getattr(self, "_class_weights", None) is not None
+            else None
+        )
+        criterion = nn.CrossEntropyLoss(weight=weight)
         optimizer = torch.optim.Adam(self._model.parameters(), lr=lr)
         history = TrainingHistory()
 
@@ -490,8 +555,8 @@ class LSTMPredictor:
         confidence = float(probs[predicted_idx])
         direction = DIRECTION_LABELS[predicted_idx]
 
-        logger.info(
-            "Prediction: {} (confidence={:.2%}) — probs={}",
+        logger.debug(
+            "Prediction: {} (confidence={:.2%}) -- probs={}",
             direction,
             confidence,
             {DIRECTION_LABELS[i]: f"{p:.3f}" for i, p in enumerate(probs)},

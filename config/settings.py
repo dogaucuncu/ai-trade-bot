@@ -64,6 +64,17 @@ def _env_int(key: str, default: int = 0) -> int:
         return default
 
 
+def _crypto_pairs_override() -> dict:
+    """Parse the ``CRYPTO_SYMBOLS`` env var into a ``default_pairs`` override.
+
+    Accepts a comma-separated list, e.g. ``CRYPTO_SYMBOLS=SOL/USDT,BTC/USDT``.
+    Returns ``{}`` when unset so :class:`BinanceSettings` keeps its own default.
+    """
+    raw = _env("CRYPTO_SYMBOLS", "")
+    pairs = tuple(s.strip().upper() for s in raw.split(",") if s.strip())
+    return {"default_pairs": pairs} if pairs else {}
+
+
 # =====================================================================
 # Nested setting groups
 # =====================================================================
@@ -75,15 +86,19 @@ class BinanceSettings:
     api_key: str = ""
     secret_key: str = ""
     testnet: bool = True
+    # Single source of truth for which crypto pairs the bot trades.
+    # Curated to liquid, currently-listed pairs that scale from micro
+    # ($100) to larger ($1000+) capital. Dropped from the old list:
+    #   SHIB/PEPE (meme, extreme volatility — risky for micro capital)
+    #   MATIC     (migrated to POL; Binance delisting/rebrand risk)
+    # When scaling up, BTC/USDT and ETH/USDT are the natural additions
+    # (deepest liquidity, lowest slippage). Override via CRYPTO_SYMBOLS env.
     default_pairs: tuple[str, ...] = (
-        "DOGE/USDT",
-        "SHIB/USDT",
-        "PEPE/USDT",
-        "XRP/USDT",
-        "ADA/USDT",
         "SOL/USDT",
         "AVAX/USDT",
-        "MATIC/USDT",
+        "XRP/USDT",
+        "ADA/USDT",
+        "DOGE/USDT",
     )
 
 
@@ -203,6 +218,7 @@ class Settings:
                 api_key=_env("BINANCE_API_KEY"),
                 secret_key=_env("BINANCE_SECRET_KEY"),
                 testnet=_env_bool("BINANCE_TESTNET", default=True),
+                **_crypto_pairs_override(),
             ),
             alpaca=AlpacaSettings(
                 api_key=_env("ALPACA_API_KEY"),

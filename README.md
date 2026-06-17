@@ -41,7 +41,7 @@
 - [Makine Öğrenmesi](#-makine-öğrenmesi)
 - [Risk Yönetimi](#-risk-yönetimi)
 - [Dashboard](#-dashboard)
-- [Backtesting](#-backtesting)
+- [Dürüst Backtesting & Edge Durumu](#-dürüst-backtesting--edge-durumu)
 - [API Referansı](#-api-referansı)
 - [Katkıda Bulunma](#-katkıda-bulunma)
 - [Lisans](#-lisans)
@@ -52,16 +52,21 @@
 ## ✨ Özellikler
 
 ### 🧠 Yapay Zeka & Makine Öğrenmesi
-- **LSTM Derin Öğrenme Modeli** — İki katmanlı LSTM ağı ile fiyat yönü tahmini (UP / DOWN / SIDEWAYS)
+- **LSTM Derin Öğrenme Modeli** — Küçük LSTM ağı (hidden 48, 1 katman) ile fiyat yönü tahmini (UP / DOWN / SIDEWAYS)
+- **Durağan (stationary) özellikler** — Ham fiyat seviyeleri yerine getiri/oran-bazlı 15 özellik; lookahead-bias'sız scaler; sınıf ağırlıkları
 - **Duygu Analizi** — Haber başlıkları için keyword-bazlı sentiment analizi + Crypto Fear & Greed Index entegrasyonu
-- **FinBERT Hazırlığı** — HuggingFace Transformers ile gelişmiş NLP sentiment analizi altyapısı (stub)
 
-### 📊 Çoklu Strateji Motoru
-- **Scalping** — 1 dakikalık mumlarla hızlı alım-satım, RSI + Bollinger Bands + hacim analizi
-- **Mean Reversion** — 15 dakikalık zaman diliminde ortalamaya dönüş stratejisi
-- **Momentum** — 1 saatlik trend takip stratejisi, ADX + EMA crossover
-- **ML Strategy** — LSTM model tahminlerine dayalı yapay zeka stratejisi
-- **Ensemble** — Ağırlıklı oylama ile tüm stratejilerin konsensüs sinyali, dinamik ağırlık ayarı
+### 📊 Strateji Motoru (kanıt-temelli)
+- **Mean Reversion** (15m) — Z-score ortalamaya dönüş. **Aktif** — bulunan tek kural-bazlı edge
+- **ML Strategy** (15m) — LSTM tahminlerine dayalı; yalnızca eğitilmiş, uyumlu modeli olan coinlerde (ör. DOGE) çalışır
+- **Scalping & Momentum** — Uygulanmış ama **varsayılan olarak KAPALI** (dürüst backtestlerde komisyon sonrası para kaybediyorlardı — bkz. [Dürüst Backtesting](#-dürüst-backtesting--edge-durumu))
+- **Ensemble** — Ağırlıklı oylama altyapısı (opsiyonel)
+
+### 🔬 Dürüst Backtesting Altyapısı
+- **Leak-free walk-forward** — Model her fold'da geçmişte eğitilip yalnızca görülmemiş gelecekte test edilir
+- **Gerçekçi maliyet** — Komisyon + slippage her işlemde; **buy & hold kıyaslaması**
+- **Timeframe-bilinçli metrikler** — Doğru yıllıklaştırılmış Sharpe/Sortino, max drawdown, profit factor
+- **Paper performans takibi** — Trade/equity SQLite'a yazılır; `paper_report.py` ile dürüst rapor
 
 ### 🛡️ Çok Katmanlı Risk Yönetimi
 - **Circuit Breaker** — 4 durumlu (NORMAL → CAUTIOUS → HALTED → EMERGENCY) otomatik koruma sistemi
@@ -126,10 +131,11 @@
 ```
 AI-Trade-Bot/
 │
-├── main.py                     # Ana giriş noktası (CLI)
+├── main.py                     # Ana giriş noktası (CLI) — paper/live engine + dashboard
 ├── run_bot.py                  # Bot başlatma scripti
-├── run_backtest.py             # Backtest çalıştırma scripti
-├── train_model.py              # ML model eğitim scripti
+├── train_model.py              # ML model eğitim scripti (coin başına, 15m, küçük model)
+├── paper_report.py             # Paper/live performans raporu (DB'den, dürüst metrikler)
+├── run_backtest.py             # (eski) tekli strateji backtest scripti
 ├── requirements.txt            # Python bağımlılıkları
 │
 ├── config/                     # Konfigürasyon
@@ -155,11 +161,11 @@ AI-Trade-Bot/
 │   │
 │   ├── strategy/               # Trading stratejileri
 │   │   ├── base.py             # Abstract base class + Signal/Position
-│   │   ├── scalping.py         # Scalping stratejisi (1m)
-│   │   ├── mean_reversion.py   # Ortalamaya dönüş (15m)
-│   │   ├── momentum.py         # Trend takip (1h)
-│   │   ├── ml_strategy.py      # LSTM bazlı ML stratejisi
-│   │   └── ensemble.py         # Ağırlıklı oylama ensemble
+│   │   ├── mean_reversion.py   # Ortalamaya dönüş (15m) — AKTİF
+│   │   ├── ml_strategy.py      # LSTM bazlı ML stratejisi (15m) — model varsa AKTİF
+│   │   ├── scalping.py         # Scalping (1m) — varsayılan KAPALI (kârsız)
+│   │   ├── momentum.py         # Trend takip (1h) — varsayılan KAPALI (kârsız)
+│   │   └── ensemble.py         # Ağırlıklı oylama ensemble (opsiyonel)
 │   │
 │   ├── ml/                     # Makine öğrenmesi modülleri
 │   │   ├── lstm_model.py       # LSTM model + predictor wrapper
@@ -185,17 +191,20 @@ AI-Trade-Bot/
 │   │   └── index.html          # Ana dashboard HTML (TradingView Charts)
 │   └── static/                 # CSS, JS, assets
 │
-├── backtest/                   # Backtesting motoru
+├── backtest/                   # Backtesting & değerlendirme
 │   ├── __init__.py
+│   ├── metrics.py              # Timeframe-bilinçli risk metrikleri + buy&hold
 │   ├── backtester.py           # Strateji backtester (Plotly raporları)
-│   └── results/                # Backtest sonuç dosyaları
+│   ├── walkforward_ml.py       # Dürüst leak-free walk-forward ML backtest (--all)
+│   ├── strategy_eval.py        # Kural-bazlı stratejileri coinlerde dürüst ölç
+│   ├── robustness.py           # Seed + eşik sağlamlık testi (edge gerçek mi?)
+│   └── results/                # Sonuç dosyaları (git'e dahil DEĞİL)
 │
-├── models/                     # Eğitilmiş ML modelleri
-│   ├── DOGE_USDT_15m/          # DOGE/USDT 15m LSTM modeli
-│   └── DOGE_USDT_1h/           # DOGE/USDT 1h LSTM modeli
+├── models/                     # Eğitilmiş ML modelleri (train_model.py üretir)
+│   └── <COIN>_<TF>/            # ör. DOGE_USDT_15m/ (ağırlıklar git'e dahil DEĞİL)
 │
 ├── data/                       # Veritabanı
-│   └── tradebot.db             # SQLite veritabanı (git'e dahil DEĞİL)
+│   └── tradebot.db             # SQLite — candles, trades, equity, açık pozisyonlar (git'e dahil DEĞİL)
 │
 ├── logs/                       # Log dosyaları (git'e dahil DEĞİL)
 │
@@ -292,10 +301,13 @@ Tüm ayarlar `config/.env` dosyasından yüklenir. Önemli parametreler:
 |-----------|-----------|----------|
 | `TRADING_MODE` | `paper` | `paper` (simülasyon) veya `live` (gerçek) |
 | `INITIAL_CAPITAL` | `50.0` | Başlangıç sermayesi (USD) |
+| `CRYPTO_SYMBOLS` | `SOL/USDT,AVAX/USDT,XRP/USDT,ADA/USDT,DOGE/USDT` | İşlenecek coinler (virgülle) |
 | `CRYPTO_ALLOCATION` | `0.75` | Kripto'ya ayrılan oran (%75) |
 | `STOCK_ALLOCATION` | `0.25` | Hisse senedine ayrılan oran (%25) |
 | `LOG_LEVEL` | `INFO` | Log seviyesi (DEBUG/INFO/WARNING/ERROR) |
 | `DASHBOARD_PORT` | `8000` | Dashboard port numarası |
+
+> **Coin seçimi:** Varsayılan 5 likit coin. `$1000+` sermayeye çıkınca `BTC/USDT,ETH/USDT` eklemek mantıklı (en yüksek likidite). Tek satır: `CRYPTO_SYMBOLS=AVAX/USDT,SOL/USDT,DOGE/USDT`
 
 ### 🔑 API Anahtarları (Zorunlu)
 
@@ -377,17 +389,40 @@ python main.py -v
 python main.py --mode live
 ```
 
+### Paper Performansını Görme
+
+```bash
+# Çalışan/biten paper oturumunun dürüst performans raporu (DB'den)
+python paper_report.py
+```
+
+### Dürüst Backtesting & Değerlendirme
+
+```bash
+# Leak-free walk-forward ML backtest (tek coin)
+python -m backtest.walkforward_ml --symbol DOGE/USDT --tf 15m
+
+# Tüm coinlerde ML edge taraması + karşılaştırma tablosu
+python -m backtest.walkforward_ml --all --tf 15m --candles 12000 --train 6000 --test 2000
+
+# Kural-bazlı stratejileri tüm coinlerde dürüstçe ölç (PF = edge)
+python -m backtest.strategy_eval
+
+# Bir coin'in edge'i gerçek mi, şans mı? (seed + eşik sağlamlık testi)
+python -m backtest.robustness --symbol DOGE/USDT --tf 15m
+```
+
 ### ML Modelini Eğitme
 
 ```bash
+# Tüm config coinleri (15m, ~20k bar, küçük model)
 python train_model.py
+
+# Tek coin (ör. DOGE-ML'i aktive etmek için)
+python train_model.py --symbol DOGE/USDT --tf 15m
 ```
 
-### Backtest Çalıştırma
-
-```bash
-python run_backtest.py
-```
+> ⚠️ **Önemli:** Eğitim doğruluğu (val_acc) **kâr kanıtı DEĞİLDİR.** Bir modele güvenmeden önce mutlaka `walkforward_ml` ile out-of-sample edge testinden geçirin.
 
 ### Dashboard'a Erişim
 
@@ -400,26 +435,26 @@ http://127.0.0.1:8000
 
 ## 📈 Stratejiler
 
-### Scalping (1 dakika)
-- **Sinyal:** RSI oversold/overbought + Bollinger Band squeeze + hacim spike
-- **Hedef:** Küçük ama sık kazançlar
-- **Stop Loss:** ATR bazlı dinamik SL
+> Stratejiler **dürüst out-of-sample backtestten geçirildi** ve canlı motorda yalnızca
+> edge gösterenler aktif. Sonuçlar için [Dürüst Backtesting](#-dürüst-backtesting--edge-durumu).
 
-### Mean Reversion (15 dakika)
-- **Sinyal:** Fiyatın Bollinger alt bandına temas + RSI divergence
-- **Hedef:** Ortalamaya dönüş hareketi
-- **Stop Loss:** Band dışı kapanış
+### ✅ Mean Reversion (15m) — AKTİF
+- **Sinyal:** Close fiyatının EMA(21)'e göre Z-score'u < −2 (alış) / > +2 (satış) + hacim onayı
+- **SL/TP:** %1.5 stop / %1.5 hedef
+- **Durum:** Bulunan tek kural-bazlı edge (en iyi AVAX PF 1.24, SOL PF 1.03)
 
-### Momentum (1 saat)
-- **Sinyal:** EMA 9/21 crossover + ADX > 25 + hacim onayı
-- **Hedef:** Trend yönünde uzun süreli pozisyon
-- **Trailing Stop:** ATR bazlı dinamik takip
+### ✅ ML Strategy (15m) — model varsa AKTİF
+- **Sinyal:** LSTM yön tahmini (UP/DOWN), güven > %40
+- **SL/TP:** %1.5 stop / %3 hedef
+- **Durum:** Yalnızca eğitilmiş + uyumlu modeli olan coinde çalışır (backtestte sadece DOGE edge gösterdi)
 
-### Ensemble (Konsensüs)
-- **Ağırlıklar:** Scalping %30, Mean Reversion %30, Momentum %40
-- **Minimum güven:** %60 konsensüs eşiği
-- **Giriş koşulu:** En az 2 stratejinin aynı yönde anlaşması
-- **Dinamik ağırlık:** Performansa dayalı Sharpe-benzeri otomatik ayar
+### ❌ Scalping (1m) — varsayılan KAPALI
+- RSI + Bollinger + hacim. **Tüm coinlerde PF 0.2–0.4** → %0.4 hedef, %0.2 komisyonu kaldıramıyor. Yapısal olarak kârsız.
+
+### ❌ Momentum (1h) — varsayılan KAPALI
+- MACD + EMA crossover. **Tüm coinlerde PF 0.45–0.88** → komisyon sonrası kaybediyor.
+
+> Stratejileri `src/bot/engine.py` içindeki `enabled_strategies` ile aç/kapat.
 
 ---
 
@@ -429,24 +464,34 @@ http://127.0.0.1:8000
 
 | Özellik | Değer |
 |---------|-------|
-| Mimari | 2 katmanlı LSTM + FC head |
-| Hidden Size | 128 |
+| Mimari | 1 katmanlı LSTM + FC head (küçük model — overfit önleme) |
+| Hidden Size | 48 |
 | Dropout | 0.2 |
-| Giriş Özellikleri | 17 (OHLCV + teknik göstergeler) |
+| Giriş Özellikleri | 15 **durağan** (getiri/oran-bazlı) |
 | Çıkış | 3 sınıf (UP / DOWN / SIDEWAYS) |
 | Lookback | 60 bar |
-| Eşikler | UP > +0.3%, DOWN < -0.3% |
+| Eğitim verisi | 15m, ~20k bar (~7 ay) — coin başına |
 
-### Giriş Özellikleri
+**Neden küçük model?** ~200k parametreli büyük model (eski hidden=128/2-katman) bu veri ölçeğinde ezberler (overfit). Küçük model + bol veri daha sağlıklı.
+
+### Giriş Özellikleri (durağan)
+Ham fiyat seviyeleri (trend halinde scaler aralığını taşar → modeli kör eder) yerine
+getiri ve oran-bazlı özellikler kullanılır:
 ```
-OHLCV (5)       : open, high, low, close, volume
-RSI (1)          : rsi_14
-MACD (3)         : macd_line, macd_signal, macd_histogram
-Bollinger (4)    : bb_upper, bb_middle, bb_lower, bb_bandwidth
-EMA (2)          : ema_9, ema_21
-ATR (1)          : atr_14
-Volume Ratio (1) : volume_ratio
+Getiriler        : log_ret_1, log_ret_3
+Mum geometrisi   : hl_range, co_ret, upper_wick, lower_wick
+RSI (bounded)    : rsi_norm
+MACD (norm.)     : macd_norm, macd_hist_norm
+Bollinger        : bb_pband, bb_bandwidth
+EMA oranları     : close_ema9_ratio, ema9_ema21_ratio
+Volatilite       : atr_pct
+Hacim            : volume_ratio
 ```
+
+### ML Doğruluk İlkeleri
+- **Lookahead-bias yok** — scaler yalnızca eğitim bölümüne fit edilir
+- **Sınıf ağırlıkları** — SIDEWAYS baskınlığına karşı ters-frekans ağırlıkları
+- **Leak-free walk-forward** — gerçek out-of-sample değerlendirme (`backtest/walkforward_ml.py`)
 
 ### Sentiment Analizi
 - **Keyword-based** — 25 pozitif + 29 negatif borsa terimlerini tarar
@@ -498,56 +543,57 @@ Dashboard `http://127.0.0.1:8000` adresinde çalışır ve şunları sunar:
 
 ---
 
-## 🔬 Backtesting
+## 🔬 Dürüst Backtesting & Edge Durumu
 
-### Tekli Strateji Backtesti
+> Bu projenin en önemli kısmı: **dürüst, kendini kandırmayan ölçüm.** Eski backtestler
+> üç ölümcül hata içeriyordu (in-sample test, lookahead-bias, komisyon churn'ü) ve
+> sahte-parlak sonuçlar üretiyordu. Yeni altyapı bunları giderir.
 
-```python
-from backtest.backtester import Backtester
-from src.strategy.momentum import MomentumStrategy
+### Komutlar
 
-bt = Backtester(initial_capital=50.0)
-result = await bt.run(
-    strategy=MomentumStrategy(),
-    symbol="SOL/USDT",
-    timeframe="1h",
-    start_date="2024-01-01",
-    end_date="2024-06-01",
-)
-print(result.summary())
+```bash
+# Leak-free walk-forward ML backtest (tek coin / tüm coinler)
+python -m backtest.walkforward_ml --symbol DOGE/USDT --tf 15m
+python -m backtest.walkforward_ml --all --tf 15m --candles 12000 --train 6000 --test 2000
+
+# Kural-bazlı stratejileri tüm coinlerde ölç (PF = sizing-bağımsız edge)
+python -m backtest.strategy_eval
+
+# Sağlamlık testi: edge gerçek mi, şans mı? (seed + eşik taraması)
+python -m backtest.robustness --symbol DOGE/USDT --tf 15m
 ```
 
-### Çoklu Strateji Karşılaştırma
-
-```python
-comparison = await bt.compare_strategies(
-    strategies=[ScalpingStrategy(), MeanReversionStrategy(), MomentumStrategy()],
-    symbol="SOL/USDT",
-    timeframe="1h",
-)
-```
-
-### Walk-Forward Testi
-
-```python
-results = await bt.walk_forward(
-    strategy=MomentumStrategy(),
-    symbol="SOL/USDT",
-    timeframe="1h",
-    start_date="2024-01-01",
-    end_date="2024-12-01",
-    train_pct=0.70,
-    n_splits=3,
-)
-```
-
-### Backtesting Özellikleri
-- ✅ Gerçekçi fee simülasyonu (Binance %0.1)
-- ✅ Slippage modelleme (%0.05)
-- ✅ Position sizing entegrasyonu
-- ✅ Risk yönetimi kuralları uygulanır
-- ✅ Plotly ile interaktif HTML raporlar
+### Özellikler
+- ✅ **Leak-free walk-forward** — model geçmişte eğitilir, yalnızca görülmemiş gelecekte test edilir
+- ✅ Gerçekçi komisyon (%0.1) + slippage (%0.05) her işlemde
+- ✅ **Buy & hold kıyaslaması** — "excess vs hold" raporlanır
+- ✅ Timeframe-bilinçli Sharpe/Sortino, max drawdown, profit factor (`backtest/metrics.py`)
 - ✅ JSON sonuç dosyaları (`backtest/results/`)
+
+### 📊 Ölçülen Edge Durumu (dürüst)
+
+**ML (15m, out-of-sample, komisyon dahil):** 5 coinden yalnızca DOGE pozitif edge gösterdi.
+
+| Coin | Net % | Buy&Hold % | PF | Sharpe | Durum |
+|------|-------|-----------|-----|--------|-------|
+| **DOGE** | +17.99 | −10.24 | 1.27 | 2.53 | ✅ |
+| AVAX | −7.43 | −27.51 | 0.92 | −0.74 | ❌ |
+| SOL | −26.89 | −15.04 | 0.65 | −3.85 | ❌ |
+| XRP | −29.85 | −14.24 | 0.64 | −4.73 | ❌ |
+| ADA | −51.72 | −31.88 | 0.52 | −8.14 | ❌ |
+
+**Kural-bazlı (PF = işlem başına edge, komisyon sonrası):** 15 kombinasyondan 2'si PF>1.
+
+| Strateji | En iyi sonuç |
+|----------|--------------|
+| mean_reversion | **AVAX PF 1.24**, SOL PF 1.03 (diğerleri <1) |
+| scalping | hepsinde 0.2–0.4 (kârsız) |
+| momentum | hepsinde 0.45–0.88 (kârsız) |
+
+> ⚠️ **Dürüst sonuç:** Henüz hiçbiri kanıtlanmış bir "para makinesi" değil. En güçlü sinyaller
+> mean-reversion @ AVAX/SOL ve DOGE-ML. Büyük "excess vs hold" sayıları çoğunlukla
+> stratejinin düşen piyasada **flat kalmasından** kaynaklanır (beceri değil). Gerçek kanıt =
+> uzun süreli paper ileri-test. Test dönemi tek rejimdi (düşüş); farklı rejimde sonuçlar değişebilir.
 
 ---
 
@@ -619,12 +665,14 @@ Bu proje [MIT Lisansı](LICENSE) altında lisanslanmıştır.
 
 > **Bu yazılım yalnızca eğitim ve araştırma amaçlıdır.**
 >
+> - **"Garanti getiri" diye bir şey yoktur.** Bu botun edge'i dürüstçe ölçüldü ve şu an
+>   **marjinal/kanıtlanmamış** (bkz. [Edge Durumu](#-ölçülen-edge-durumu-dürüst)). Hiçbir kâr vaadi yoktur.
+> - **Önce uzun süre paper modda çalıştırın.** Gerçek paraya ancak paper'da tutarlı,
+>   pozitif risk-ayarlı performans gördükten sonra geçin.
 > - Bu bot ile yapılan işlemler finansal kayıplara yol açabilir
 > - Yazılım "olduğu gibi" sunulur, hiçbir garanti verilmez
-> - Gerçek para ile kullanmadan önce kapsamlı backtesting yapın
 > - Kaybetmeyi göze alamayacağınız parayı asla yatırmayın
-> - Kripto para ve hisse senedi piyasaları yüksek risk içerir
-> - Yatırım kararlarınızdan yalnızca siz sorumlusunuz
+> - Kripto para piyasaları yüksek risk içerir; yatırım kararlarınızdan yalnızca siz sorumlusunuz
 > - Bu yazılımın geliştiricileri hiçbir mali sorumluluk kabul etmez
 
 ---

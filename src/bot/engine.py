@@ -72,11 +72,23 @@ class BotEngine:
         crypto_symbols: list[str] | None = None,
         stock_symbols: list[str] | None = None,
         dry_run: bool = False,
+        storage: Any = None,
     ) -> None:
         self.capital = capital
-        self.crypto_symbols = crypto_symbols or ["SOL/USDT", "AVAX/USDT"]
+        # Symbols are normally supplied by main.py from settings.binance
+        # (the single source of truth). This fallback only applies to direct
+        # construction without args (e.g. tests); keep it in sync with the
+        # curated default in config/settings.py.
+        self.crypto_symbols = crypto_symbols or [
+            "SOL/USDT", "AVAX/USDT", "XRP/USDT", "ADA/USDT", "DOGE/USDT",
+        ]
         self.stock_symbols = stock_symbols or ["AAPL", "MSFT"]
         self.dry_run = dry_run
+        # Optional persistence layer (src.data.storage.Storage). When set, the
+        # engine records trades, equity snapshots and open positions so a
+        # paper run can be measured and survive restarts.
+        self.storage = storage
+        self._mode = "paper" if dry_run else "live"
         self._running = False
         self._shutdown_event = asyncio.Event()
 
@@ -89,12 +101,34 @@ class BotEngine:
         self.order_manager = OrderManager(risk_manager=self.risk_manager)
 
         # ---- strategies --------------------------------------------------
+        # Evidence-based selection (see backtest/strategy_eval.py and
+        # backtest/walkforward_ml.py):
+        #   * scalping  — PF 0.2-0.4 on every coin (0.4% target can't beat
+        #                 0.2% round-trip fees) -> DISABLED.
+        #   * momentum  — PF 0.45-0.88 everywhere -> DISABLED.
+        #   * mean_reversion — only rule edge (best AVAX/SOL) -> ENABLED @15m.
+        #   * ML — only earned edge on DOGE@15m -> runs there if a model exists.
         self.scalping = ScalpingStrategy()
-        self.mean_reversion = MeanReversionStrategy()
         self.momentum = MomentumStrategy()
-        self.ml_strategy = MLStrategy(name="ml_1h")
+        self.mean_reversion = MeanReversionStrategy()
+        self.ml_strategy = MLStrategy(
+            name="ml_15m",
+            config={
+                "confidence_threshold": 0.40,
+                "stop_loss_pct": 0.015,
+                "take_profit_pct": 0.03,
+            },
+        )
         self.ensemble = EnsembleStrategy(
             strategies=[self.scalping, self.mean_reversion, self.momentum],
+        )
+
+        # Which strategies the live loop actually runs (evidence-based).
+        self.enabled_strategies: set[str] = {"mean_reversion", "ml"}
+        # ML runs only on coins that have a trained 15m model on disk.
+        self.ml_timeframe = "15m"
+        self.ml_symbols: list[str] = self._symbols_with_model(
+            self.crypto_symbols, self.ml_timeframe
         )
 
         # ---- open positions ----------------------------------------------
@@ -144,6 +178,9 @@ class BotEngine:
         except Exception as exc:
             logger.warning("Alpaca executor init failed — {}", exc)
 
+        # Recover any open positions persisted by a previous run.
+        await self._recover_positions()
+
         logger.info("BotEngine initialised")
 
     # ------------------------------------------------------------ main loop
@@ -188,10 +225,14 @@ class BotEngine:
         # 1. Circuit-breaker check
         balance = await self._get_balance()
         daily_pnl = self.risk_manager.get_daily_pnl()
+        # In paper/dry-run mode market data comes straight from the public
+        # HTTP API (see _fetch_data), so the exchange *executor* isn't needed
+        # — treat the API as healthy. In live mode require a real executor.
+        api_healthy = self.dry_run or self._binance_exec is not None
         safe, alerts = self.circuit_breaker.check_all(
             balance=balance,
             daily_pnl=daily_pnl,
-            api_healthy=self._binance_exec is not None,
+            api_healthy=api_healthy,
         )
 
         if self.circuit_breaker.requires_close_all:
@@ -209,30 +250,21 @@ class BotEngine:
         # 3. Monitor open positions first
         await self._monitor_positions()
 
-        # 4. Run strategies at their respective intervals
-        # Scalping: every tick (1 min)
-        if tick % 1 == 0:
-            await self._run_strategy_on_symbols(
-                self.scalping, self.crypto_symbols, "1m"
-            )
-
-        # Mean reversion: every 15 ticks (15 min)
-        if tick % 15 == 0:
+        # 4. Run the evidence-based strategy set at their intervals.
+        # Mean reversion every 15 ticks (15m) — the only rule edge found.
+        if "mean_reversion" in self.enabled_strategies and tick % 15 == 0:
             await self._run_strategy_on_symbols(
                 self.mean_reversion, self.crypto_symbols, "15m"
             )
 
-        # Momentum: every 60 ticks (1 hour)
-        if tick % 60 == 0:
+        # ML every 15 ticks (15m), only on coins that have a trained model.
+        if "ml" in self.enabled_strategies and self.ml_symbols and tick % 15 == 0:
             await self._run_strategy_on_symbols(
-                self.momentum, self.crypto_symbols, "1h"
+                self.ml_strategy, self.ml_symbols, self.ml_timeframe
             )
 
-        # ML Strategy: every 60 ticks (1 hour)
-        if tick % 60 == 0:
-            await self._run_strategy_on_symbols(
-                self.ml_strategy, self.crypto_symbols, "1h"
-            )
+        # 5. Record an equity snapshot for honest performance tracking
+        await self._record_equity(balance)
 
     # -------------------------------------------------- strategy execution
 
@@ -256,6 +288,7 @@ class BotEngine:
                     continue
 
                 df.attrs["symbol"] = symbol
+                df.attrs["timeframe"] = timeframe
                 signal = strategy.analyze(df)
 
                 if signal.action == TradeAction.HOLD:
@@ -329,6 +362,7 @@ class BotEngine:
                 side=signal.action.value,
                 position_id=pos.position_id,
             )
+            await self._persist_open_position(pos, sizing.value_usd)
             logger.info(
                 "[PAPER] Simulated {} {} — ${:.2f} @ {:.6f} conf={:.2f} SL={:.6f} TP={:.6f}",
                 signal.action.value, signal.symbol, sizing.value_usd,
@@ -369,6 +403,7 @@ class BotEngine:
                 side=signal.action.value,
                 position_id=pos.position_id,
             )
+            await self._persist_open_position(pos, sizing.value_usd)
             logger.info(
                 "[engine] Position opened — {} {} ${:.2f}",
                 signal.action.value, signal.symbol, sizing.value_usd,
@@ -442,6 +477,7 @@ class BotEngine:
                     )
 
         self.risk_manager.close_position(position.position_id, pnl)
+        await self._persist_close(position, current_price, pnl)
         logger.info(
             "[engine] Position closed — {} PnL=${:.4f} ({:.2f}%)",
             position.symbol, pnl, pnl_pct,
@@ -560,6 +596,7 @@ class BotEngine:
             "mean_reversion": self.mean_reversion,
             "momentum": self.momentum,
             "ensemble": self.ensemble,
+            "ml_15m": self.ml_strategy,
         }
         return mapping.get(name)
 
@@ -567,6 +604,153 @@ class BotEngine:
         """Return the strategy's historical win rate (or default)."""
         strat = self._get_strategy_by_name(name)
         return strat.win_rate if strat else 0.5
+
+    @staticmethod
+    def _symbols_with_model(symbols: list[str], timeframe: str) -> list[str]:
+        """Return symbols that have a trained model *compatible* with the
+        current feature set.
+
+        A model is only used if its saved ``feature_columns`` match the
+        current :data:`src.ml.lstm_model._FEATURE_COLUMNS`. A stale model
+        (trained on a different feature set) is skipped so the ML strategy
+        stays cleanly dormant rather than silently returning HOLD. Retrain
+        with ``python train_model.py --symbol <COIN> --tf <TF>``.
+        """
+        import json
+        from pathlib import Path
+
+        from src.ml.lstm_model import _FEATURE_COLUMNS
+
+        models_dir = Path(__file__).resolve().parent.parent.parent / "models"
+        out: list[str] = []
+        for s in symbols:
+            safe = s.replace("/", "_").replace("\\", "_")
+            meta = models_dir / f"{safe}_{timeframe}" / "metadata.json"
+            if not meta.exists():
+                continue
+            try:
+                cols = json.loads(meta.read_text(encoding="utf-8")).get(
+                    "feature_columns", []
+                )
+            except Exception:
+                continue
+            if list(cols) == list(_FEATURE_COLUMNS):
+                out.append(s)
+            else:
+                logger.warning(
+                    "[engine] Model for {} {} is stale (feature mismatch) — "
+                    "ML disabled for it. Retrain: python train_model.py "
+                    "--symbol {} --tf {}",
+                    s, timeframe, s, timeframe,
+                )
+        return out
+
+    # ------------------------------------------------------- persistence
+
+    async def _persist_open_position(
+        self, position: Position, value_usd: float
+    ) -> None:
+        """Persist a newly opened position (no-op if no storage attached)."""
+        if self.storage is None:
+            return
+        try:
+            await self.storage.save_open_position(
+                position_id=position.position_id,
+                symbol=position.symbol,
+                side=position.side.value,
+                entry_price=position.entry_price,
+                quantity=position.quantity,
+                stop_loss=position.stop_loss,
+                take_profit=position.take_profit,
+                entry_time=position.entry_time,
+                strategy=position.strategy_name,
+                value_usd=value_usd,
+            )
+        except Exception:
+            logger.exception(
+                "[engine] Failed to persist open position {}", position.position_id
+            )
+
+    async def _persist_close(
+        self, position: Position, exit_price: float, pnl: float
+    ) -> None:
+        """Record the closing trade and drop the open-position row."""
+        if self.storage is None:
+            return
+        try:
+            close_side = "sell" if position.side == TradeAction.BUY else "buy"
+            await self.storage.save_trade(
+                symbol=position.symbol,
+                side=close_side,
+                price=exit_price,
+                quantity=position.quantity,
+                strategy=position.strategy_name,
+                pnl=pnl,
+                status="filled",
+            )
+            await self.storage.delete_open_position(position.position_id)
+        except Exception:
+            logger.exception(
+                "[engine] Failed to persist close for {}", position.position_id
+            )
+
+    async def _record_equity(self, balance: float) -> None:
+        """Write an equity snapshot for honest paper/live performance tracking."""
+        if self.storage is None:
+            return
+        try:
+            unrealised = sum(p.unrealized_pnl for p in self._positions.values())
+            await self.storage.save_equity_snapshot(
+                equity=balance + unrealised,
+                balance=balance,
+                daily_pnl=self.risk_manager.get_daily_pnl(),
+                open_positions=len(self._positions),
+                mode=self._mode,
+            )
+        except Exception:
+            logger.exception("[engine] Failed to record equity snapshot")
+
+    async def _recover_positions(self) -> None:
+        """Reload open positions persisted by a previous run (restart recovery)."""
+        if self.storage is None:
+            return
+        try:
+            rows = await self.storage.get_open_positions()
+        except Exception:
+            logger.exception("[engine] Failed to load persisted positions")
+            return
+
+        for r in rows:
+            try:
+                side = TradeAction(r["side"])
+                pos = Position(
+                    symbol=r["symbol"],
+                    side=side,
+                    entry_price=r["entry_price"],
+                    quantity=r["quantity"],
+                    stop_loss=r["stop_loss"],
+                    take_profit=r["take_profit"],
+                    entry_time=r["entry_time"],
+                    strategy_name=r["strategy"],
+                    position_id=r["position_id"],
+                )
+                self._positions[pos.position_id] = pos
+                self.risk_manager.register_open_position(
+                    symbol=pos.symbol,
+                    value=r["value_usd"],
+                    side=side.value,
+                    position_id=pos.position_id,
+                )
+            except Exception:
+                logger.exception(
+                    "[engine] Could not recover position {}", r.get("position_id")
+                )
+
+        if self._positions:
+            logger.info(
+                "[engine] Recovered {} open position(s) from storage",
+                len(self._positions),
+            )
 
     # ---------------------------------------------------------- shutdown
 

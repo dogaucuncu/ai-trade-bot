@@ -134,6 +134,9 @@ class ModelTrainer:
         lr: float = 0.001,
         lookback: int = 60,
         batch_size: int = 32,
+        hidden_size: int = 48,
+        num_layers: int = 1,
+        dropout: float = 0.2,
     ) -> TrainingHistory:
         """Train (or retrain) an LSTM model for a single symbol.
 
@@ -153,6 +156,11 @@ class ModelTrainer:
             LSTM input sequence length (bars).
         batch_size:
             Mini-batch size.
+        hidden_size, num_layers, dropout:
+            LSTM model size. Defaults are deliberately SMALL (hidden=48,
+            1 layer): with only ~10-40k training sequences a large model
+            (hidden=128/2-layer, ~200k params) overfits badly. Keep the
+            model small unless you have far more data.
 
         Returns
         -------
@@ -181,7 +189,9 @@ class ModelTrainer:
         )
 
         # ── 3. Prepare data & train ──────────────────────────────────
-        predictor = LSTMPredictor()
+        predictor = LSTMPredictor(
+            hidden_size=hidden_size, num_layers=num_layers, dropout=dropout,
+        )
         train_loader, val_loader = predictor.prepare_data(
             df, lookback=lookback, batch_size=batch_size,
         )

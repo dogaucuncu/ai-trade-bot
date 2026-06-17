@@ -17,8 +17,17 @@ class MLStrategy(BaseStrategy):
     def __init__(self, name: str, config: dict | None = None) -> None:
         super().__init__(name, config)
         self.confidence_threshold = self.config.get("confidence_threshold", 0.50)
+        # SL/TP as fractions of entry price. Defaults match the config that
+        # showed edge in backtest/walkforward_ml.py (1.5% stop / 3% target),
+        # not the old wide 5%/10% which was never validated.
+        self.stop_loss_pct = self.config.get("stop_loss_pct", 0.015)
+        self.take_profit_pct = self.config.get("take_profit_pct", 0.03)
         self.predictor_service = PredictionService()
-        logger.info(f"MLStrategy '{self.name}' initialized with threshold {self.confidence_threshold:.2%}")
+        logger.info(
+            "MLStrategy '{}' initialized — threshold {:.2%}, SL {:.1%}, TP {:.1%}",
+            self.name, self.confidence_threshold,
+            self.stop_loss_pct, self.take_profit_pct,
+        )
 
     def analyze(self, df: pd.DataFrame) -> Signal:
         """Analyze the dataframe using the ML model."""
@@ -58,10 +67,13 @@ class MLStrategy(BaseStrategy):
             elif direction == "DOWN":
                 action = TradeAction.SELL
 
-        # Calculate a wide stop loss and take profit to allow ML to manage exits
-        # or we can use fixed percentages (e.g. 5% SL, 10% TP)
-        stop_loss = current_price * 0.95 if action == TradeAction.BUY else current_price * 1.05
-        take_profit = current_price * 1.10 if action == TradeAction.BUY else current_price * 0.90
+        # SL/TP from config (default 1.5% / 3% — the validated values).
+        if action == TradeAction.BUY:
+            stop_loss = current_price * (1 - self.stop_loss_pct)
+            take_profit = current_price * (1 + self.take_profit_pct)
+        else:
+            stop_loss = current_price * (1 + self.stop_loss_pct)
+            take_profit = current_price * (1 - self.take_profit_pct)
 
         return Signal(
             symbol=symbol,
