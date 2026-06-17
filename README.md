@@ -1,98 +1,98 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python">
-  <img src="https://img.shields.io/badge/PyTorch-2.0+-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white" alt="PyTorch">
-  <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI">
-  <img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" alt="License">
-  <img src="https://img.shields.io/badge/Status-Active-brightgreen?style=for-the-badge" alt="Status">
+ <img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python">
+ <img src="https://img.shields.io/badge/PyTorch-2.0+-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white" alt="PyTorch">
+ <img src="https://img.shields.io/badge/FastAPI-0.110+-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI">
+ <img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" alt="License">
+ <img src="https://img.shields.io/badge/Status-Active-brightgreen?style=for-the-badge" alt="Status">
 </p>
 
-<h1 align="center">🤖 AI Trade Bot</h1>
+<h1 align="center">AI Trade Bot</h1>
 
 <p align="center">
-  <strong>Yapay Zeka Destekli Kripto & Hisse Senedi Mikro-Sermaye Trading Botu</strong>
-</p>
-
-<p align="center">
-  LSTM derin öğrenme, ensemble strateji motoru, gerçek zamanlı dashboard ve<br>
-  çok katmanlı risk yönetimi ile donatılmış otonom trading sistemi.
+ <strong>Yapay Zeka Destekli Kripto & Hisse Senedi Mikro-Sermaye Trading Botu</strong>
 </p>
 
 <p align="center">
-  <a href="#-özellikler">Özellikler</a> •
-  <a href="#-mimari">Mimari</a> •
-  <a href="#-kurulum">Kurulum</a> •
-  <a href="#-kullanım">Kullanım</a> •
-  <a href="#-stratejiler">Stratejiler</a> •
-  <a href="#-backtesting">Backtesting</a> •
-  <a href="#-katkıda-bulunma">Katkıda Bulunma</a>
+ LSTM derin öğrenme, ensemble strateji motoru, gerçek zamanlı dashboard ve<br>
+ çok katmanlı risk yönetimi ile donatılmış otonom trading sistemi.
+</p>
+
+<p align="center">
+ <a href="#özellikler">Özellikler</a> •
+ <a href="#mimari">Mimari</a> •
+ <a href="#kurulum">Kurulum</a> •
+ <a href="#kullanım">Kullanım</a> •
+ <a href="#stratejiler">Stratejiler</a> •
+ <a href="#backtesting">Backtesting</a> •
+ <a href="#katkıda-bulunma">Katkıda Bulunma</a>
 </p>
 
 ---
 
-## 📋 İçindekiler
+## İçindekiler
 
-- [Özellikler](#-özellikler)
-- [Mimari](#-mimari)
-- [Proje Yapısı](#-proje-yapısı)
-- [Kurulum](#-kurulum)
-- [Konfigürasyon](#-konfigürasyon)
-- [Kullanım](#-kullanım)
-- [Stratejiler](#-stratejiler)
-- [Makine Öğrenmesi](#-makine-öğrenmesi)
-- [Risk Yönetimi](#-risk-yönetimi)
-- [Dashboard](#-dashboard)
-- [Dürüst Backtesting & Edge Durumu](#-dürüst-backtesting--edge-durumu)
-- [API Referansı](#-api-referansı)
-- [Katkıda Bulunma](#-katkıda-bulunma)
-- [Lisans](#-lisans)
-- [Sorumluluk Reddi](#-sorumluluk-reddi)
+- [Özellikler](#özellikler)
+- [Mimari](#mimari)
+- [Proje Yapısı](#proje-yapısı)
+- [Kurulum](#kurulum)
+- [Konfigürasyon](#konfigürasyon)
+- [Kullanım](#kullanım)
+- [Stratejiler](#stratejiler)
+- [Makine Öğrenmesi](#makine-öğrenmesi)
+- [Risk Yönetimi](#risk-yönetimi)
+- [Dashboard](#dashboard)
+- [Dürüst Backtesting & Edge Durumu](#dürüst-backtesting--edge-durumu)
+- [API Referansı](#api-referansı)
+- [Katkıda Bulunma](#katkıda-bulunma)
+- [Lisans](#lisans)
+- [Sorumluluk Reddi](#sorumluluk-reddi)
 
 ---
 
-## ✨ Özellikler
+## Özellikler
 
-### 🧠 Yapay Zeka & Makine Öğrenmesi
+### Yapay Zeka & Makine Öğrenmesi
 - **LSTM Derin Öğrenme Modeli** — Küçük LSTM ağı (hidden 48, 1 katman) ile fiyat yönü tahmini (UP / DOWN / SIDEWAYS)
 - **Durağan (stationary) özellikler** — Ham fiyat seviyeleri yerine getiri/oran-bazlı 15 özellik; lookahead-bias'sız scaler; sınıf ağırlıkları
 - **Duygu Analizi** — Haber başlıkları için keyword-bazlı sentiment analizi + Crypto Fear & Greed Index entegrasyonu
 
-### 📊 Strateji Motoru (kanıt-temelli)
+### Strateji Motoru (kanıt-temelli)
 - **Mean Reversion** (15m) — Z-score ortalamaya dönüş. **Aktif** — bulunan tek kural-bazlı edge
 - **ML Strategy** (15m) — LSTM tahminlerine dayalı; yalnızca eğitilmiş, uyumlu modeli olan coinlerde (ör. DOGE) çalışır
-- **Scalping & Momentum** — Uygulanmış ama **varsayılan olarak KAPALI** (dürüst backtestlerde komisyon sonrası para kaybediyorlardı — bkz. [Dürüst Backtesting](#-dürüst-backtesting--edge-durumu))
+- **Scalping & Momentum** — Uygulanmış ama **varsayılan olarak KAPALI** (dürüst backtestlerde komisyon sonrası para kaybediyorlardı — bkz. [Dürüst Backtesting](#dürüst-backtesting--edge-durumu))
 - **Ensemble** — Ağırlıklı oylama altyapısı (opsiyonel)
 
-### 🔬 Dürüst Backtesting Altyapısı
+### Dürüst Backtesting Altyapısı
 - **Leak-free walk-forward** — Model her fold'da geçmişte eğitilip yalnızca görülmemiş gelecekte test edilir
 - **Gerçekçi maliyet** — Komisyon + slippage her işlemde; **buy & hold kıyaslaması**
 - **Timeframe-bilinçli metrikler** — Doğru yıllıklaştırılmış Sharpe/Sortino, max drawdown, profit factor
 - **Paper performans takibi** — Trade/equity SQLite'a yazılır; `paper_report.py` ile dürüst rapor
 
-### 🛡️ Çok Katmanlı Risk Yönetimi
+### Çok Katmanlı Risk Yönetimi
 - **Circuit Breaker** — 4 durumlu (NORMAL → CAUTIOUS → HALTED → EMERGENCY) otomatik koruma sistemi
 - **Position Sizing** — Kelly Criterion bazlı optimal pozisyon boyutlandırma
 - **Risk Manager** — Günlük kayıp limiti, max drawdown, portföy maruziyeti kontrolleri
 - **Trailing Stop** — Dinamik stop-loss güncelleme mekanizması
 
-### 🔗 Çoklu Borsa Desteği
-- **Binance** — Kripto para çiftleri (DOGE, SHIB, PEPE, XRP, ADA, SOL, AVAX, MATIC)
+### Çoklu Borsa Desteği
+- **Binance** — Kripto para çiftleri (SOL, AVAX, XRP, ADA, DOGE — `CRYPTO_SYMBOLS` ile yapılandırılabilir)
 - **Alpaca Markets** — ABD hisse senetleri (AAPL, MSFT, TSLA, NVDA, AMD, META) + fractional shares
 - **Paper & Live Mode** — Testnet üzerinde paper trading veya gerçek hesapla canlı trading
 
-### 📡 Gerçek Zamanlı Dashboard
+### Gerçek Zamanlı Dashboard
 - **WebSocket** ile canlı veri akışı
 - **TradingView Charts** — Interaktif mum grafikleri
 - **Pozisyon & İşlem Takibi** — Açık pozisyonlar, trade geçmişi, sinyal monitörü
 - **Bot Kontrolleri** — Start / Stop / Emergency Stop butonları
 - **Performans İstatistikleri** — Win rate, Sharpe ratio, equity curve
 
-### 🔔 Bildirim Sistemi
+### Bildirim Sistemi
 - **E-posta Bildirimleri** — SMTP üzerinden trade ve risk uyarıları
 - **WebSocket Push** — Dashboard üzerinden anlık bildirimler
 
 ---
 
-## 🏗 Mimari
+## Mimari
 
 ```
 ┌──────────────────────────────────────────────────────────┐
@@ -113,10 +113,10 @@
 │        │   │   Breaker    │   │ Alpaca       │
 └───┬────┘   └──────────────┘   └──────────────┘
     │
-    ├── Scalping (1m)
-    ├── Mean Reversion (15m)
-    ├── Momentum (1h)
-    └── ML Strategy (1h, LSTM)
+    ├── Mean Reversion (15m)      [aktif]
+    ├── ML Strategy (15m, LSTM)   [model varsa]
+    ├── Scalping (1m)             [kapali]
+    └── Momentum (1h)             [kapali]
 
 ┌───────────────────────────────────────────┐
 │           Dashboard (FastAPI)              │
@@ -126,7 +126,7 @@
 
 ---
 
-## 📁 Proje Yapısı
+## Proje Yapısı
 
 ```
 AI-Trade-Bot/
@@ -142,7 +142,7 @@ AI-Trade-Bot/
 │   ├── __init__.py
 │   ├── settings.py             # Merkezi ayarlar (dataclass + .env)
 │   ├── .env.example            # Ortam değişkenleri şablonu
-│   └── .env                    # 🔒 Gerçek anahtarlar (git'e dahil DEĞİL)
+│   └── .env                    # Gerçek anahtarlar (git'e dahil DEĞİL)
 │
 ├── src/                        # Ana kaynak kodu
 │   ├── __init__.py
@@ -215,17 +215,17 @@ AI-Trade-Bot/
 
 ---
 
-## 🚀 Kurulum
+## Kurulum
 
 ### Gereksinimler
 
 | Araç | Versiyon | Zorunlu mu? | İndirme |
 |------|---------|:-----------:|--------|
-| **Python** | 3.11+ | ✅ Evet | [python.org](https://www.python.org/downloads/) |
-| **pip** | Son sürüm | ✅ Evet | Python ile birlikte gelir |
-| **Git** | 2.40+ | ✅ Evet | [git-scm.com](https://git-scm.com/download/win) |
-| **Redis** | 7.0+ | ❌ Opsiyonel | [redis.io](https://redis.io/downloads/) |
-| **NVIDIA CUDA** | 11.8+ | ❌ Opsiyonel | [developer.nvidia.com](https://developer.nvidia.com/cuda-downloads) |
+| **Python** | 3.11+ | Evet | [python.org](https://www.python.org/downloads/) |
+| **pip** | Son sürüm | Evet | Python ile birlikte gelir |
+| **Git** | 2.40+ | Evet | [git-scm.com](https://git-scm.com/download/win) |
+| **Redis** | 7.0+ | Opsiyonel | [redis.io](https://redis.io/downloads/) |
+| **NVIDIA CUDA** | 11.8+ | Opsiyonel | [developer.nvidia.com](https://developer.nvidia.com/cuda-downloads) |
 
 ### 1. Repoyu Klonlayın
 
@@ -291,7 +291,7 @@ nano config/.env       # Linux/macOS
 
 ---
 
-## ⚙️ Konfigürasyon
+## Konfigürasyon
 
 Tüm ayarlar `config/.env` dosyasından yüklenir. Önemli parametreler:
 
@@ -309,7 +309,7 @@ Tüm ayarlar `config/.env` dosyasından yüklenir. Önemli parametreler:
 
 > **Coin seçimi:** Varsayılan 5 likit coin. `$1000+` sermayeye çıkınca `BTC/USDT,ETH/USDT` eklemek mantıklı (en yüksek likidite). Tek satır: `CRYPTO_SYMBOLS=AVAX/USDT,SOL/USDT,DOGE/USDT`
 
-### 🔑 API Anahtarları (Zorunlu)
+### API Anahtarları (Zorunlu)
 
 #### Binance API Key Alma
 
@@ -325,7 +325,7 @@ Tüm ayarlar `config/.env` dosyasından yüklenir. Önemli parametreler:
 3. **Testnet için (önerilen):** [testnet.binance.vision](https://testnet.binance.vision/) → GitHub ile giriş → API key oluşturun
 4. **Gerçek hesap için:** Binance → Hesap → API Yönetimi → API Oluştur
 5. API izinlerinde sadece **"Spot Trading"** ve **"Read"** izinlerini açın
-6. ⚠️ **"Withdrawal"** iznini asla açmayın!
+6. **"Withdrawal"** iznini asla açmayın!
 
 #### Alpaca API Key Alma
 
@@ -340,11 +340,11 @@ Tüm ayarlar `config/.env` dosyasından yüklenir. Önemli parametreler:
 2. Dashboard'a giriş yapın → Sol menüde **"Paper Trading"** seçin
 3. **API Keys** bölümünden **"Generate New Key"** tıklayın
 4. `API Key ID` ve `Secret Key` değerlerini kopyalayın
-5. ⚠️ Secret key sadece bir kez gösterilir, kaydetmeyi unutmayın!
+5. Secret key sadece bir kez gösterilir, kaydetmeyi unutmayın!
 
 > **Not:** Alpaca yalnızca ABD hisse senetlerini destekler. ABD dışından kullanım için bazı kısıtlamalar olabilir.
 
-### 📧 SMTP E-posta Bildirimleri (Opsiyonel)
+### SMTP E-posta Bildirimleri (Opsiyonel)
 
 | Parametre | Varsayılan | Açıklama |
 |-----------|-----------|----------|
@@ -360,7 +360,7 @@ Tüm ayarlar `config/.env` dosyasından yüklenir. Önemli parametreler:
 2. **"2 Adımlı Doğrulama"** aktif olmalı
 3. Güvenlik → **"Uygulama Şifreleri"** → Uygulama seçin: "Posta" → Cihaz: "Diğer" → "AI Trade Bot" yazın
 4. Oluşturulan 16 haneli şifreyi `SMTP_PASSWORD` olarak girin
-5. ⚠️ Normal Gmail şifrenizi değil, uygulama şifresini kullanın!
+5. Normal Gmail şifrenizi değil, uygulama şifresini kullanın!
 
 ### Risk Parametreleri (Hardcoded — `config/settings.py`)
 
@@ -374,7 +374,7 @@ Tüm ayarlar `config/.env` dosyasından yüklenir. Önemli parametreler:
 
 ---
 
-## 💻 Kullanım
+## Kullanım
 
 ### Botu Başlatma
 
@@ -385,7 +385,7 @@ python main.py
 # Verbose logging ile
 python main.py -v
 
-# Live mode (⚠️ gerçek para!)
+# Live mode (gerçek para!)
 python main.py --mode live
 ```
 
@@ -422,7 +422,7 @@ python train_model.py
 python train_model.py --symbol DOGE/USDT --tf 15m
 ```
 
-> ⚠️ **Önemli:** Eğitim doğruluğu (val_acc) **kâr kanıtı DEĞİLDİR.** Bir modele güvenmeden önce mutlaka `walkforward_ml` ile out-of-sample edge testinden geçirin.
+> **Önemli:** Eğitim doğruluğu (val_acc) **kâr kanıtı DEĞİLDİR.** Bir modele güvenmeden önce mutlaka `walkforward_ml` ile out-of-sample edge testinden geçirin.
 
 ### Dashboard'a Erişim
 
@@ -433,32 +433,32 @@ http://127.0.0.1:8000
 
 ---
 
-## 📈 Stratejiler
+## Stratejiler
 
 > Stratejiler **dürüst out-of-sample backtestten geçirildi** ve canlı motorda yalnızca
-> edge gösterenler aktif. Sonuçlar için [Dürüst Backtesting](#-dürüst-backtesting--edge-durumu).
+> edge gösterenler aktif. Sonuçlar için [Dürüst Backtesting](#dürüst-backtesting--edge-durumu).
 
-### ✅ Mean Reversion (15m) — AKTİF
+### Mean Reversion (15m) — AKTİF
 - **Sinyal:** Close fiyatının EMA(21)'e göre Z-score'u < −2 (alış) / > +2 (satış) + hacim onayı
 - **SL/TP:** %1.5 stop / %1.5 hedef
 - **Durum:** Bulunan tek kural-bazlı edge (en iyi AVAX PF 1.24, SOL PF 1.03)
 
-### ✅ ML Strategy (15m) — model varsa AKTİF
+### ML Strategy (15m) — model varsa AKTİF
 - **Sinyal:** LSTM yön tahmini (UP/DOWN), güven > %40
 - **SL/TP:** %1.5 stop / %3 hedef
 - **Durum:** Yalnızca eğitilmiş + uyumlu modeli olan coinde çalışır (backtestte sadece DOGE edge gösterdi)
 
-### ❌ Scalping (1m) — varsayılan KAPALI
+### Scalping (1m) — varsayılan KAPALI
 - RSI + Bollinger + hacim. **Tüm coinlerde PF 0.2–0.4** → %0.4 hedef, %0.2 komisyonu kaldıramıyor. Yapısal olarak kârsız.
 
-### ❌ Momentum (1h) — varsayılan KAPALI
+### Momentum (1h) — varsayılan KAPALI
 - MACD + EMA crossover. **Tüm coinlerde PF 0.45–0.88** → komisyon sonrası kaybediyor.
 
 > Stratejileri `src/bot/engine.py` içindeki `enabled_strategies` ile aç/kapat.
 
 ---
 
-## 🧠 Makine Öğrenmesi
+## Makine Öğrenmesi
 
 ### LSTM Modeli
 
@@ -500,7 +500,7 @@ Hacim            : volume_ratio
 
 ---
 
-## 🛡️ Risk Yönetimi
+## Risk Yönetimi
 
 ### Circuit Breaker Durumları
 
@@ -528,7 +528,7 @@ position_size = kelly_fraction * capital * kelly_multiplier
 
 ---
 
-## 📊 Dashboard
+## Dashboard
 
 Dashboard `http://127.0.0.1:8000` adresinde çalışır ve şunları sunar:
 
@@ -543,7 +543,7 @@ Dashboard `http://127.0.0.1:8000` adresinde çalışır ve şunları sunar:
 
 ---
 
-## 🔬 Dürüst Backtesting & Edge Durumu
+## Dürüst Backtesting & Edge Durumu
 
 > Bu projenin en önemli kısmı: **dürüst, kendini kandırmayan ölçüm.** Eski backtestler
 > üç ölümcül hata içeriyordu (in-sample test, lookahead-bias, komisyon churn'ü) ve
@@ -564,23 +564,23 @@ python -m backtest.robustness --symbol DOGE/USDT --tf 15m
 ```
 
 ### Özellikler
-- ✅ **Leak-free walk-forward** — model geçmişte eğitilir, yalnızca görülmemiş gelecekte test edilir
-- ✅ Gerçekçi komisyon (%0.1) + slippage (%0.05) her işlemde
-- ✅ **Buy & hold kıyaslaması** — "excess vs hold" raporlanır
-- ✅ Timeframe-bilinçli Sharpe/Sortino, max drawdown, profit factor (`backtest/metrics.py`)
-- ✅ JSON sonuç dosyaları (`backtest/results/`)
+- **Leak-free walk-forward** — model geçmişte eğitilir, yalnızca görülmemiş gelecekte test edilir
+- Gerçekçi komisyon (%0.1) + slippage (%0.05) her işlemde
+- **Buy & hold kıyaslaması** — "excess vs hold" raporlanır
+- Timeframe-bilinçli Sharpe/Sortino, max drawdown, profit factor (`backtest/metrics.py`)
+- JSON sonuç dosyaları (`backtest/results/`)
 
-### 📊 Ölçülen Edge Durumu (dürüst)
+### Ölçülen Edge Durumu (dürüst)
 
 **ML (15m, out-of-sample, komisyon dahil):** 5 coinden yalnızca DOGE pozitif edge gösterdi.
 
 | Coin | Net % | Buy&Hold % | PF | Sharpe | Durum |
 |------|-------|-----------|-----|--------|-------|
-| **DOGE** | +17.99 | −10.24 | 1.27 | 2.53 | ✅ |
-| AVAX | −7.43 | −27.51 | 0.92 | −0.74 | ❌ |
-| SOL | −26.89 | −15.04 | 0.65 | −3.85 | ❌ |
-| XRP | −29.85 | −14.24 | 0.64 | −4.73 | ❌ |
-| ADA | −51.72 | −31.88 | 0.52 | −8.14 | ❌ |
+| **DOGE** | +17.99 | −10.24 | 1.27 | 2.53 | Evet |
+| AVAX | −7.43 | −27.51 | 0.92 | −0.74 | Hayir |
+| SOL | −26.89 | −15.04 | 0.65 | −3.85 | Hayir |
+| XRP | −29.85 | −14.24 | 0.64 | −4.73 | Hayir |
+| ADA | −51.72 | −31.88 | 0.52 | −8.14 | Hayir |
 
 **Kural-bazlı (PF = işlem başına edge, komisyon sonrası):** 15 kombinasyondan 2'si PF>1.
 
@@ -590,14 +590,14 @@ python -m backtest.robustness --symbol DOGE/USDT --tf 15m
 | scalping | hepsinde 0.2–0.4 (kârsız) |
 | momentum | hepsinde 0.45–0.88 (kârsız) |
 
-> ⚠️ **Dürüst sonuç:** Henüz hiçbiri kanıtlanmış bir "para makinesi" değil. En güçlü sinyaller
+> **Dürüst sonuç:** Henüz hiçbiri kanıtlanmış bir "para makinesi" değil. En güçlü sinyaller
 > mean-reversion @ AVAX/SOL ve DOGE-ML. Büyük "excess vs hold" sayıları çoğunlukla
 > stratejinin düşen piyasada **flat kalmasından** kaynaklanır (beceri değil). Gerçek kanıt =
 > uzun süreli paper ileri-test. Test dönemi tek rejimdi (düşüş); farklı rejimde sonuçlar değişebilir.
 
 ---
 
-## 🔌 API Referansı
+## API Referansı
 
 Dashboard REST API endpoints:
 
@@ -617,7 +617,7 @@ Dashboard REST API endpoints:
 
 ---
 
-## 🧪 Testler
+## Testler
 
 ```bash
 # Tüm testleri çalıştır
@@ -632,7 +632,7 @@ python test_strategy.py
 
 ---
 
-## 🤝 Katkıda Bulunma
+## Katkıda Bulunma
 
 Katkılarınızı memnuniyetle karşılıyoruz! Lütfen aşağıdaki adımları takip edin:
 
@@ -655,20 +655,20 @@ chore: bakım görevi
 
 ---
 
-## 📜 Lisans
+## Lisans
 
 Bu proje [MIT Lisansı](LICENSE) altında lisanslanmıştır.
 
 ---
 
-## ⚠️ Sorumluluk Reddi
+## Sorumluluk Reddi
 
 > **Bu yazılım yalnızca eğitim ve araştırma amaçlıdır.**
 >
 > - **"Garanti getiri" diye bir şey yoktur.** Bu botun edge'i dürüstçe ölçüldü ve şu an
->   **marjinal/kanıtlanmamış** (bkz. [Edge Durumu](#-ölçülen-edge-durumu-dürüst)). Hiçbir kâr vaadi yoktur.
+> **marjinal/kanıtlanmamış** (bkz. [Edge Durumu](#ölçülen-edge-durumu-dürüst)). Hiçbir kâr vaadi yoktur.
 > - **Önce uzun süre paper modda çalıştırın.** Gerçek paraya ancak paper'da tutarlı,
->   pozitif risk-ayarlı performans gördükten sonra geçin.
+> pozitif risk-ayarlı performans gördükten sonra geçin.
 > - Bu bot ile yapılan işlemler finansal kayıplara yol açabilir
 > - Yazılım "olduğu gibi" sunulur, hiçbir garanti verilmez
 > - Kaybetmeyi göze alamayacağınız parayı asla yatırmayın
@@ -678,9 +678,9 @@ Bu proje [MIT Lisansı](LICENSE) altında lisanslanmıştır.
 ---
 
 <p align="center">
-  ⭐ Bu projeyi beğendiyseniz yıldız vermeyi unutmayın!
+ Bu projeyi beğendiyseniz yıldız vermeyi unutmayın!
 </p>
 
 <p align="center">
-  Made with ❤️ and 🤖 AI
+ Made with and AI
 </p>
