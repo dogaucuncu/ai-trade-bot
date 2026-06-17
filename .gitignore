@@ -132,6 +132,8 @@ $RECYCLE.BIN/
 *.tmp
 *.temp
 .gemini/
+
+# ── Graphify (knowledge graph output) ────────────────────────────────
 graphify-out/
 
 # ── Claude Code ───────────────────────────────────────────────────────
