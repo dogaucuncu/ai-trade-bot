@@ -125,6 +125,7 @@ async def _async_main(settings) -> None:  # noqa: ANN001
     engine = BotEngine(
         capital=settings.initial_capital,
         crypto_symbols=list(settings.binance.default_pairs),
+        stock_symbols=list(settings.alpaca.default_symbols),
         dry_run=is_dry_run,
         storage=storage,
     )
@@ -158,8 +159,30 @@ async def _async_main(settings) -> None:  # noqa: ANN001
         await storage.close()
 
 
+def _enable_os_trust_store() -> None:
+    """Make Python trust the OS certificate store (secure TLS).
+
+    On networks with TLS interception (corporate proxy / AV SSL inspection) the
+    interceptor's root CA lives in the OS store but not in certifi's bundle, so
+    certifi-verified HTTPS (e.g. the Alpaca stock data API) fails with
+    "unable to get local issuer certificate". ``truststore`` routes verification
+    through the OS store — keeping TLS verification ON, never disabling it.
+
+    Must run before any HTTPS client is created. No-op if truststore is absent.
+    """
+    try:
+        import truststore
+
+        truststore.inject_into_ssl()
+    except Exception:
+        # truststore optional — falls back to certifi (fine off intercepted nets)
+        pass
+
+
 def main() -> None:
     """Synchronous entry point."""
+    _enable_os_trust_store()
+
     args = _parse_args()
 
     # ── Import settings (triggers .env loading) ─────────────────────

@@ -38,11 +38,13 @@ from src.risk.circuit_breaker import BreakerState, CircuitBreaker
 from src.risk.manager import RiskManager
 from src.risk.position_sizer import PositionSizer
 from src.strategy.base import BaseStrategy, Position, Signal, TradeAction
+from src.strategy.breakout import BreakoutStrategy
 from src.strategy.ensemble import EnsembleStrategy
 from src.strategy.mean_reversion import MeanReversionStrategy
 from src.strategy.ml_strategy import MLStrategy
 from src.strategy.momentum import MomentumStrategy
 from src.strategy.scalping import ScalpingStrategy
+from src.strategy.vwap_reversion import VWAPReversionStrategy
 
 
 class BotEngine:
@@ -111,6 +113,17 @@ class BotEngine:
         self.scalping = ScalpingStrategy()
         self.momentum = MomentumStrategy()
         self.mean_reversion = MeanReversionStrategy()
+        # VWAP reversion had the best in-sample edge in backtest/strategy_eval:
+        # PF>1 on ALL five coins (DOGE 1.78, SOL 1.56, AVAX 1.27, XRP 1.23,
+        # ADA 1.03). HONEST CAVEAT: a 70/30 IS/OOS split shows the edge is only
+        # marginal out-of-sample (SOL ~0.95, AVAX ~0.87, DOGE too few OOS
+        # trades). It clears the same bar as mean_reversion, so it is enabled for
+        # PAPER forward-testing only — the real proof. Validate in paper before
+        # trusting it live. Re-check with: python -m backtest.optimize ...
+        self.vwap_reversion = VWAPReversionStrategy()
+        # Breakout instantiated for backtesting/comparison but NOT enabled —
+        # PF<1 on every coin, so it stays out of the live loop.
+        self.breakout = BreakoutStrategy()
         self.ml_strategy = MLStrategy(
             name="ml_15m",
             config={
@@ -124,7 +137,7 @@ class BotEngine:
         )
 
         # Which strategies the live loop actually runs (evidence-based).
-        self.enabled_strategies: set[str] = {"mean_reversion", "ml"}
+        self.enabled_strategies: set[str] = {"mean_reversion", "ml", "vwap_reversion"}
         # ML runs only on coins that have a trained 15m model on disk.
         self.ml_timeframe = "15m"
         self.ml_symbols: list[str] = self._symbols_with_model(
@@ -137,6 +150,21 @@ class BotEngine:
         # ---- executors (set up in initialize) ----------------------------
         self._binance_exec: Any = None
         self._alpaca_exec: Any = None
+        # Unified data collector — used for the stock (Alpaca) data feed.
+        # Crypto data still comes straight from Binance public REST in
+        # _fetch_data; the collector is only needed for equities.
+        self._collector: Any = None
+
+        # ---- notifications (set up in initialize) ------------------------
+        # Email + web-push hub. Wired to position open/close, emergency stop
+        # and a best-effort daily summary at UTC date rollover.
+        self.notifier: Any = None
+        self._last_summary_date: Any = None
+        self._last_daily_pnl: float = 0.0
+
+        # ---- sentiment risk gate (opt-in, set up in initialize) ----------
+        # Claude-free news/sentiment veto applied before order execution.
+        self._sentiment_gate: Any = None
 
         # ---- tick counters -----------------------------------------------
         self._tick_count = 59
@@ -177,6 +205,51 @@ class BotEngine:
             )
         except Exception as exc:
             logger.warning("Alpaca executor init failed — {}", exc)
+
+        # Data collector for the stock (Alpaca) feed. Constructed without a
+        # storage handle so it only fetches (the engine persists trades/equity
+        # itself). Needs valid Alpaca keys to actually return stock bars.
+        try:
+            from src.data.collector import DataCollector
+
+            self._collector = DataCollector(_settings, storage=None)
+        except Exception as exc:
+            logger.warning("DataCollector init failed (stock feed off) — {}", exc)
+
+        # Notification hub — starts its background email worker. Email only
+        # actually sends when SMTP credentials are configured; web-push (toast)
+        # always works via the dashboard WebSocket.
+        try:
+            from dashboard.notifications import NotificationManager
+
+            self.notifier = NotificationManager()
+            await self.notifier.start()
+        except Exception as exc:
+            logger.warning("Notifier init failed — {}", exc)
+            self.notifier = None
+
+        # Sentiment risk gate — only constructed when explicitly enabled. Makes
+        # no LLM calls; uses keyless news + keyword scoring. Defaults to
+        # observation mode (logs scores, does not block) until SENTIMENT_GATE=true.
+        try:
+            if _settings.sentiment.enabled:
+                from src.data.news_feed import NewsFeed
+                from src.risk.sentiment_gate import SentimentGate
+
+                news_feed = NewsFeed(
+                    cryptopanic_token=_settings.sentiment.cryptopanic_token,
+                    alpaca_key=_settings.alpaca.api_key,
+                    alpaca_secret=_settings.alpaca.secret_key,
+                )
+                self._sentiment_gate = SentimentGate(
+                    threshold=_settings.sentiment.threshold,
+                    enforce=_settings.sentiment.gate,
+                    cache_ttl=_settings.sentiment.cache_ttl,
+                    news_feed=news_feed,
+                )
+        except Exception as exc:
+            logger.warning("Sentiment gate init failed — {}", exc)
+            self._sentiment_gate = None
 
         # Recover any open positions persisted by a previous run.
         await self._recover_positions()
@@ -237,8 +310,17 @@ class BotEngine:
 
         if self.circuit_breaker.requires_close_all:
             logger.critical("EMERGENCY — closing all positions")
+            if self.notifier is not None:
+                try:
+                    reason = "; ".join(alerts) if alerts else "circuit breaker EMERGENCY"
+                    await self.notifier.send_emergency_alert(reason)
+                except Exception:
+                    logger.exception("[engine] Emergency alert failed")
             await self._close_all_positions()
             return
+
+        # Best-effort daily summary at UTC date rollover.
+        await self._maybe_send_daily_summary(balance)
 
         if not safe:
             logger.warning("Circuit breaker not safe — skipping tick: {}", alerts)
@@ -257,11 +339,34 @@ class BotEngine:
                 self.mean_reversion, self.crypto_symbols, "15m"
             )
 
+        # VWAP reversion every 15 ticks (15m) — strongest rule edge (PF>1 on
+        # all five coins in strategy_eval).
+        if "vwap_reversion" in self.enabled_strategies and tick % 15 == 0:
+            await self._run_strategy_on_symbols(
+                self.vwap_reversion, self.crypto_symbols, "15m"
+            )
+
         # ML every 15 ticks (15m), only on coins that have a trained model.
         if "ml" in self.enabled_strategies and self.ml_symbols and tick % 15 == 0:
             await self._run_strategy_on_symbols(
                 self.ml_strategy, self.ml_symbols, self.ml_timeframe
             )
+
+        # Stocks: run the enabled rule strategies every 15 ticks (15m), but only
+        # while the US market is open. ML is crypto-only (no stock models), so
+        # stocks run the rule-based edges only.
+        if self.stock_symbols and tick % 15 == 0:
+            if self._is_stock_market_open():
+                for name, strat in (
+                    ("mean_reversion", self.mean_reversion),
+                    ("vwap_reversion", self.vwap_reversion),
+                ):
+                    if name in self.enabled_strategies:
+                        await self._run_strategy_on_symbols(
+                            strat, self.stock_symbols, "15m"
+                        )
+            else:
+                logger.debug("[engine] US market closed — skipping stock strategies")
 
         # 5. Record an equity snapshot for honest performance tracking
         await self._record_equity(balance)
@@ -321,6 +426,21 @@ class BotEngine:
             )
             return
 
+        # Sentiment risk gate (opt-in). Annotates signal.metadata["sentiment"];
+        # in observation mode it only logs, in enforce mode it can veto.
+        if self._sentiment_gate is not None:
+            try:
+                allow, sreason, _score = await self._sentiment_gate.check(signal)
+            except Exception:
+                logger.exception("[engine] Sentiment gate error — allowing trade")
+                allow = True
+            if not allow:
+                logger.info(
+                    "[engine] Trade vetoed by sentiment — {} {} — {}",
+                    signal.action.value, signal.symbol, sreason,
+                )
+                return
+
         # Position sizing
         sizing = self.position_sizer.calculate(
             balance=balance,
@@ -369,6 +489,14 @@ class BotEngine:
                 current_price, signal.confidence,
                 signal.stop_loss_price, signal.take_profit_price,
             )
+            await self._notify_trade(
+                action=signal.action.value,
+                symbol=signal.symbol,
+                price=current_price,
+                quantity=units,
+                pnl=0.0,
+                strategy=signal.strategy_name,
+            )
             return
 
         # Execute
@@ -407,6 +535,14 @@ class BotEngine:
             logger.info(
                 "[engine] Position opened — {} {} ${:.2f}",
                 signal.action.value, signal.symbol, sizing.value_usd,
+            )
+            await self._notify_trade(
+                action=signal.action.value,
+                symbol=signal.symbol,
+                price=pos.entry_price,
+                quantity=pos.quantity,
+                pnl=0.0,
+                strategy=signal.strategy_name,
             )
 
     # ------------------------------------------------- position monitoring
@@ -482,6 +618,15 @@ class BotEngine:
             "[engine] Position closed — {} PnL=${:.4f} ({:.2f}%)",
             position.symbol, pnl, pnl_pct,
         )
+        close_action = "SELL" if position.side == TradeAction.BUY else "BUY"
+        await self._notify_trade(
+            action=f"CLOSE {close_action}",
+            symbol=position.symbol,
+            price=current_price,
+            quantity=position.quantity,
+            pnl=pnl,
+            strategy=position.strategy_name,
+        )
 
     async def _close_all_positions(self) -> None:
         """Emergency: close every open position immediately."""
@@ -508,9 +653,20 @@ class BotEngine:
         import pandas as pd
 
         if "/" not in symbol:
-            # Stock symbol — not yet implemented
-            logger.debug("[engine] Stock data feed not implemented for {}", symbol)
-            return None
+            # Stock symbol — fetch from Alpaca via the DataCollector.
+            if self._collector is None:
+                logger.debug(
+                    "[engine] No data collector — stock feed off for {}", symbol
+                )
+                return None
+            try:
+                df = await self._collector.fetch_stock_bars(symbol, timeframe, limit)
+                if df is None or df.empty:
+                    return None
+                return df
+            except Exception:
+                logger.exception("[engine] Failed to fetch stock data for {}", symbol)
+                return None
 
         # Convert CCXT symbol format "BASE/QUOTE" → "BASEQUOTE" (e.g. DOGE/USDT → DOGEUSDT)
         binance_symbol = symbol.replace("/", "")
@@ -589,11 +745,87 @@ class BotEngine:
             return self._binance_exec
         return self._alpaca_exec
 
+    async def _maybe_send_daily_summary(self, balance: float) -> None:
+        """Send a daily P&L summary once per UTC day (best effort).
+
+        Captures the running daily P&L each tick; when the UTC date changes we
+        email the previous day's snapshot before the RiskManager rolls it over.
+        """
+        if self.notifier is None:
+            return
+        today = datetime.now(timezone.utc).date()
+        if self._last_summary_date is None:
+            self._last_summary_date = today
+            self._last_daily_pnl = self.risk_manager.get_daily_pnl()
+            return
+
+        if today != self._last_summary_date:
+            try:
+                await self.notifier.send_daily_summary(
+                    {
+                        "total_pnl": self._last_daily_pnl,
+                        "total_trades": self.order_manager.total_orders,
+                        "balance": balance,
+                    }
+                )
+            except Exception:
+                logger.exception("[engine] Daily summary failed")
+            self._last_summary_date = today
+
+        # Keep the snapshot fresh so the rollover reports the right day's P&L.
+        self._last_daily_pnl = self.risk_manager.get_daily_pnl()
+
+    async def _notify_trade(
+        self,
+        *,
+        action: str,
+        symbol: str,
+        price: float,
+        quantity: float,
+        pnl: float,
+        strategy: str,
+    ) -> None:
+        """Fire a trade notification (email + dashboard toast). No-op if the
+        notifier is unavailable; never raises into the trading loop."""
+        if self.notifier is None:
+            return
+        try:
+            await self.notifier.send_trade_notification(
+                {
+                    "action": action,
+                    "symbol": symbol,
+                    "price": price,
+                    "quantity": quantity,
+                    "pnl": pnl,
+                    "strategy": strategy,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+        except Exception:
+            logger.exception("[engine] Trade notification failed for {}", symbol)
+
+    @staticmethod
+    def _is_stock_market_open() -> bool:
+        """Return True when the US equity market is open (NYSE hours).
+
+        Delegates to :meth:`AlpacaExecutor.is_market_open` (9:30-16:00 ET,
+        weekdays). Falls back to ``False`` if the check is unavailable so the
+        bot never trades stocks when it can't confirm the market is open.
+        """
+        try:
+            from src.execution.alpaca_exec import AlpacaExecutor
+
+            return AlpacaExecutor.is_market_open()
+        except Exception:
+            return False
+
     def _get_strategy_by_name(self, name: str) -> BaseStrategy | None:
         """Look up a strategy instance by its name."""
         mapping: dict[str, BaseStrategy] = {
             "scalping": self.scalping,
             "mean_reversion": self.mean_reversion,
+            "vwap_reversion": self.vwap_reversion,
+            "breakout": self.breakout,
             "momentum": self.momentum,
             "ensemble": self.ensemble,
             "ml_15m": self.ml_strategy,
@@ -770,6 +1002,20 @@ class BotEngine:
                 await self._binance_exec.close()
             except Exception:
                 logger.exception("Error closing Binance connection")
+
+        # Close the data collector's CCXT session (used for the stock feed).
+        if self._collector:
+            try:
+                await self._collector.close()
+            except Exception:
+                logger.exception("Error closing data collector")
+
+        # Stop the notification email worker.
+        if self.notifier:
+            try:
+                await self.notifier.stop()
+            except Exception:
+                logger.exception("Error stopping notifier")
 
         # Log final state
         logger.info(

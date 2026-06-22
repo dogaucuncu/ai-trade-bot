@@ -33,15 +33,19 @@ from backtest.backtester import Backtester
 from backtest.metrics import buy_and_hold_return
 from backtest.walkforward_ml import fetch_klines
 from config.settings import settings
+from src.strategy.breakout import BreakoutStrategy
 from src.strategy.mean_reversion import MeanReversionStrategy
 from src.strategy.momentum import MomentumStrategy
 from src.strategy.scalping import ScalpingStrategy
+from src.strategy.vwap_reversion import VWAPReversionStrategy
 
 # Each rule strategy on the timeframe it was designed for.
 STRATEGIES: dict[str, tuple[str, type]] = {
     "scalping": ("5m", ScalpingStrategy),
     "mean_reversion": ("15m", MeanReversionStrategy),
     "momentum": ("1h", MomentumStrategy),
+    "breakout": ("1h", BreakoutStrategy),
+    "vwap_reversion": ("15m", VWAPReversionStrategy),
 }
 
 

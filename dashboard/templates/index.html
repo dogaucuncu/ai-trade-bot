@@ -14,25 +14,62 @@
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
         :root {
-            --bg-deep:    #0a0e27;
-            --bg-surface: #0f1332;
-            --glass:      rgba(255,255,255,0.05);
-            --glass-border: rgba(255,255,255,0.08);
-            --glass-hover: rgba(255,255,255,0.08);
-            --accent:     #7c3aed;
-            --accent-glow: rgba(124,58,237,0.25);
+            /* ── Fintech "Real-Time Monitoring" palette (gold + purple, dark) ── */
+            /* Surfaces */
+            --bg-deep:    #0a0f1c;   /* app background */
+            --bg-surface: #0f1626;   /* elevated background */
+            --surface:    #131c2e;   /* card/panel surface (solid for contrast) */
+            --surface-2:  #18233a;   /* nested surface */
+            --border:     #26324a;   /* visible in dark */
+            --border-strong: #34425f;
+            /* Brand */
+            --primary:    #f59e0b;   /* gold/amber — trust, primary accent */
+            --primary-strong: #fbbf24;
+            --primary-contrast: #0a0f1c;
+            --primary-dim: rgba(245,158,11,0.14);
+            --accent:     #8b5cf6;   /* purple — tech accent */
+            --accent-glow: rgba(139,92,246,0.25);
+            /* Semantic */
             --green:      #10b981;
             --green-dim:  rgba(16,185,129,0.15);
-            --red:        #ef4444;
-            --red-dim:    rgba(239,68,68,0.15);
+            --red:        #f43f5e;
+            --red-dim:    rgba(244,63,94,0.15);
             --yellow:     #f59e0b;
             --yellow-dim: rgba(245,158,11,0.15);
-            --blue:       #3b82f6;
-            --text:       #e2e8f0;
-            --text-dim:   #94a3b8;
-            --text-muted: #64748b;
-            --radius:     16px;
+            --blue:       #38bdf8;
+            /* Text (contrast-checked on --surface) */
+            --text:       #f1f5f9;
+            --text-dim:   #aab6c9;
+            --text-muted: #7c8aa3;
+            /* Legacy glass aliases (kept so existing inline styles still resolve) */
+            --glass:      #131c2e;
+            --glass-border: #26324a;
+            --glass-hover: #18233a;
+            /* Shape & motion */
+            --radius:     14px;
             --radius-sm:  10px;
+            --radius-pill: 999px;
+            --ring:       rgba(245,158,11,0.55);
+            --shadow-1:   0 1px 2px rgba(0,0,0,0.30);
+            --shadow-2:   0 10px 30px rgba(0,0,0,0.38);
+            --dur:        0.2s;
+        }
+
+        /* Respect users who prefer less motion */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.001ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.001ms !important;
+            }
+        }
+
+        /* Visible keyboard focus on every interactive element */
+        a:focus-visible, button:focus-visible, select:focus-visible,
+        [tabindex]:focus-visible {
+            outline: 2px solid var(--ring);
+            outline-offset: 2px;
+            border-radius: var(--radius-sm);
         }
 
         body {
@@ -48,8 +85,8 @@
             content: '';
             position: fixed; inset: 0;
             background:
-                radial-gradient(ellipse 80% 60% at 20% 10%, rgba(124,58,237,0.12) 0%, transparent 60%),
-                radial-gradient(ellipse 60% 50% at 80% 80%, rgba(59,130,246,0.08) 0%, transparent 60%);
+                radial-gradient(ellipse 80% 60% at 18% 0%, rgba(245,158,11,0.08) 0%, transparent 55%),
+                radial-gradient(ellipse 60% 50% at 85% 90%, rgba(139,92,246,0.10) 0%, transparent 60%);
             pointer-events: none;
             z-index: 0;
         }
@@ -60,15 +97,22 @@
         /* ── Sidebar ──────────────────────────────────────────── */
         .sidebar {
             width: 260px;
-            background: rgba(15,19,50,0.8);
-            backdrop-filter: blur(20px);
-            border-right: 1px solid var(--glass-border);
+            background: linear-gradient(180deg, var(--bg-surface) 0%, var(--bg-deep) 100%);
+            border-right: 1px solid var(--border);
             padding: 24px 16px;
             display: flex; flex-direction: column; gap: 24px;
             position: fixed; top: 0; bottom: 0; left: 0;
             z-index: 100;
             transition: transform 0.3s ease;
         }
+        .sidebar-logo .logo-mark {
+            display: grid; place-items: center;
+            width: 34px; height: 34px; border-radius: 9px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-strong) 100%);
+            color: var(--primary-contrast); flex-shrink: 0;
+        }
+        .icon-svg { width: 18px; height: 18px; flex-shrink: 0; }
+        .panel-title .icon-svg { color: var(--primary); }
 
         .sidebar-logo {
             display: flex; align-items: center; gap: 12px;
@@ -77,7 +121,7 @@
         }
         .sidebar-logo .icon { font-size: 28px; }
         .sidebar-logo h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
-        .sidebar-logo span { color: var(--accent); }
+        .sidebar-logo span { color: var(--primary); }
 
         .sidebar-section { display: flex; flex-direction: column; gap: 8px; }
         .sidebar-section h3 {
@@ -88,17 +132,21 @@
         .btn {
             display: flex; align-items: center; gap: 10px;
             padding: 12px 16px;
+            min-height: 44px;
             border-radius: var(--radius-sm);
-            border: 1px solid var(--glass-border);
-            background: var(--glass);
+            border: 1px solid var(--border);
+            background: var(--surface-2);
             color: var(--text);
             font-family: inherit;
             font-size: 13px; font-weight: 500;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: background var(--dur) ease, border-color var(--dur) ease,
+                        transform var(--dur) ease, box-shadow var(--dur) ease;
         }
-        .btn:hover { background: var(--glass-hover); transform: translateY(-1px); }
+        .btn:hover { background: var(--border); border-color: var(--border-strong); transform: translateY(-1px); }
         .btn:active { transform: translateY(0); }
+        .btn .icon-svg { width: 16px; height: 16px; }
+        select.btn { cursor: pointer; }
 
         .btn-start { border-color: rgba(16,185,129,0.3); }
         .btn-start:hover { background: var(--green-dim); border-color: var(--green); }
@@ -172,46 +220,48 @@
             gap: 16px; margin-bottom: 28px;
         }
         .stat-card {
-            background: var(--glass);
-            backdrop-filter: blur(12px);
-            border: 1px solid var(--glass-border);
+            background: var(--surface);
+            border: 1px solid var(--border);
             border-radius: var(--radius);
             padding: 20px 22px;
-            transition: all 0.25s ease;
+            transition: border-color var(--dur) ease, transform var(--dur) ease, box-shadow var(--dur) ease;
             position: relative; overflow: hidden;
+            box-shadow: var(--shadow-1);
         }
         .stat-card::before {
             content: ''; position: absolute; top: 0; left: 0; right: 0;
             height: 3px; border-radius: var(--radius) var(--radius) 0 0;
-            background: var(--accent); opacity: 0;
+            background: linear-gradient(90deg, var(--primary), var(--accent)); opacity: 0;
             transition: opacity 0.3s;
         }
-        .stat-card:hover { border-color: rgba(255,255,255,0.12); transform: translateY(-2px); }
+        .stat-card:hover { border-color: var(--border-strong); transform: translateY(-2px); box-shadow: var(--shadow-2); }
         .stat-card:hover::before { opacity: 1; }
         .stat-card .label { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.06em; }
-        .stat-card .value { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
-        .stat-card .sub { font-size: 12px; color: var(--text-dim); margin-top: 6px; }
+        .stat-card .value { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+        .stat-card .sub { font-size: 12px; color: var(--text-dim); margin-top: 6px; font-variant-numeric: tabular-nums; }
         .positive { color: var(--green) !important; }
         .negative { color: var(--red) !important; }
 
         /* ── Glass panel ──────────────────────────────────────── */
         .panel {
-            background: var(--glass);
-            backdrop-filter: blur(12px);
-            border: 1px solid var(--glass-border);
+            background: var(--surface);
+            border: 1px solid var(--border);
             border-radius: var(--radius);
             padding: 24px;
             margin-bottom: 20px;
+            box-shadow: var(--shadow-1);
         }
         .panel-header {
             display: flex; align-items: center; justify-content: space-between;
             margin-bottom: 18px;
         }
-        .panel-title { font-size: 15px; font-weight: 600; }
+        .panel-title { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 9px; }
         .panel-badge {
-            font-size: 11px; color: var(--text-muted);
-            background: rgba(255,255,255,0.04);
-            padding: 3px 10px; border-radius: 999px;
+            font-size: 11px; color: var(--text-dim);
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            padding: 3px 10px; border-radius: var(--radius-pill);
+            font-variant-numeric: tabular-nums;
         }
 
         /* ── Chart ────────────────────────────────────────────── */
@@ -245,16 +295,16 @@
         /* ── Strategy cards ───────────────────────────────────── */
         .strat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
         .strat-card {
-            background: rgba(255,255,255,0.02);
-            border: 1px solid var(--glass-border);
+            background: var(--surface-2);
+            border: 1px solid var(--border);
             border-radius: var(--radius-sm);
             padding: 16px;
             text-align: center;
-            transition: all 0.2s;
+            transition: border-color var(--dur) ease, transform var(--dur) ease;
         }
-        .strat-card:hover { border-color: var(--accent); }
+        .strat-card:hover { border-color: var(--primary); transform: translateY(-2px); }
         .strat-card .name { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
-        .strat-card .metric { font-size: 22px; font-weight: 700; color: var(--accent); }
+        .strat-card .metric { font-size: 22px; font-weight: 700; color: var(--primary); font-variant-numeric: tabular-nums; }
         .strat-card .desc { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
 
         /* ── Notifications toast ──────────────────────────────── */
@@ -273,11 +323,20 @@
             animation: slideIn 0.35s ease;
             display: flex; align-items: flex-start; gap: 10px;
         }
-        .toast-info    { background: rgba(59,130,246,0.15); border-color: rgba(59,130,246,0.3); }
-        .toast-success { background: rgba(16,185,129,0.15); border-color: rgba(16,185,129,0.3); }
-        .toast-warning { background: rgba(245,158,11,0.15); border-color: rgba(245,158,11,0.3); }
-        .toast-error   { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.3); }
-        .toast-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+        .toast {
+            background: var(--surface);
+            box-shadow: var(--shadow-2);
+        }
+        .toast-info    { border-color: rgba(56,189,248,0.4); }
+        .toast-info    .toast-icon { color: var(--blue); }
+        .toast-success { border-color: rgba(16,185,129,0.4); }
+        .toast-success .toast-icon { color: var(--green); }
+        .toast-warning { border-color: rgba(245,158,11,0.4); }
+        .toast-warning .toast-icon { color: var(--yellow); }
+        .toast-error   { border-color: rgba(244,63,94,0.4); }
+        .toast-error   .toast-icon { color: var(--red); }
+        .toast-icon { flex-shrink: 0; margin-top: 1px; }
+        .toast-icon .icon-svg { width: 18px; height: 18px; }
         .toast-body .toast-title { font-weight: 600; margin-bottom: 2px; }
         .toast-body .toast-msg { color: var(--text-dim); font-size: 12px; }
 
@@ -298,6 +357,14 @@
         .ws-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--red); }
         .ws-dot.connected { background: var(--green); box-shadow: 0 0 6px var(--green); }
 
+        /* ── Mobile nav toggle (hidden on desktop) ────────────── */
+        .menu-toggle { display: none; padding: 10px; width: 44px; justify-content: center; }
+        .sidebar-scrim {
+            display: none; position: fixed; inset: 0; z-index: 90;
+            background: rgba(0,0,0,0.55);
+        }
+        .sidebar-scrim.show { display: block; }
+
         /* ── Responsive ───────────────────────────────────────── */
         @media (max-width: 1200px) {
             .stat-grid { grid-template-columns: repeat(2, 1fr); }
@@ -305,11 +372,12 @@
             .strat-grid { grid-template-columns: 1fr 1fr; }
         }
         @media (max-width: 768px) {
-            .sidebar { transform: translateX(-100%); }
+            .sidebar { transform: translateX(-100%); box-shadow: var(--shadow-2); }
             .sidebar.open { transform: translateX(0); }
             .main { margin-left: 0; padding: 16px; }
             .stat-grid { grid-template-columns: 1fr; }
             .strat-grid { grid-template-columns: 1fr; }
+            .menu-toggle { display: flex; }
         }
 
         /* ── Scrollbar ────────────────────────────────────────── */
@@ -333,20 +401,24 @@
         <!-- ═══ Sidebar ═══ -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-logo">
-                <span class="icon">🤖</span>
+                <span class="logo-mark" aria-hidden="true">
+                    <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>
+                    </svg>
+                </span>
                 <h1>AI <span>Trade</span> Bot</h1>
             </div>
 
             <div class="sidebar-section">
                 <h3>Quick Controls</h3>
-                <button class="btn btn-start" onclick="botStart()">
-                    <span>▶</span> Start Bot
+                <button class="btn btn-start" onclick="botStart()" aria-label="Start Bot">
+                    <svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"/></svg> Start Bot
                 </button>
-                <button class="btn btn-stop" onclick="botStop()">
-                    <span>⏹</span> Stop Bot
+                <button class="btn btn-stop" onclick="botStop()" aria-label="Stop Bot">
+                    <svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg> Stop Bot
                 </button>
-                <button class="btn btn-emergency" onclick="emergencyStop()">
-                    <span>🚨</span> Emergency Stop
+                <button class="btn btn-emergency" onclick="emergencyStop()" aria-label="Emergency Stop — close all positions">
+                    <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> Emergency Stop
                 </button>
             </div>
 
@@ -371,11 +443,17 @@
             </div>
         </aside>
 
+        <!-- Mobile sidebar scrim -->
+        <div class="sidebar-scrim" id="sidebarScrim" onclick="toggleSidebar()" aria-hidden="true"></div>
+
         <!-- ═══ Main Content ═══ -->
         <main class="main">
             <!-- Top bar -->
             <div class="topbar">
                 <div class="topbar-left">
+                    <button class="btn menu-toggle" onclick="toggleSidebar()" aria-label="Toggle navigation menu" aria-controls="sidebar">
+                        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+                    </button>
                     <div class="status-badge">
                         <div class="status-dot" id="statusDot"></div>
                         <span id="statusText">Stopped</span>
@@ -414,7 +492,7 @@
             <!-- P&L Chart -->
             <div class="panel">
                 <div class="panel-header">
-                    <span class="panel-title">📈 Equity Curve</span>
+                    <span class="panel-title"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>Equity Curve</span>
                     <span class="panel-badge" id="chartPoints">0 points</span>
                 </div>
                 <div class="chart-container">
@@ -425,19 +503,34 @@
             <!-- Live Market Chart -->
             <div class="panel">
                 <div class="panel-header">
-                    <span class="panel-title">🕯️ Live Market Chart</span>
+                    <span class="panel-title"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5v4"/><rect width="4" height="6" x="7" y="9" rx="1"/><path d="M9 15v2"/><path d="M17 3v2"/><rect width="4" height="8" x="15" y="5" rx="1"/><path d="M17 13v3"/><path d="M3 3v18h18"/></svg>Live Market Chart</span>
                     <div style="display:flex; gap: 8px;">
                         <select id="marketSymbol" class="btn" style="padding: 6px 12px; height: auto;">
-                            <option value="DOGE/USDT">DOGE/USDT</option>
-                            <option value="BTC/USDT">BTC/USDT</option>
-                            <option value="ETH/USDT">ETH/USDT</option>
-                            <option value="SOL/USDT">SOL/USDT</option>
-                            <option value="AAPL">AAPL</option>
+                            <optgroup label="Crypto">
+                                <option value="DOGE/USDT">DOGE/USDT</option>
+                                <option value="SOL/USDT">SOL/USDT</option>
+                                <option value="AVAX/USDT">AVAX/USDT</option>
+                                <option value="XRP/USDT">XRP/USDT</option>
+                                <option value="ADA/USDT">ADA/USDT</option>
+                                <option value="BTC/USDT">BTC/USDT</option>
+                                <option value="ETH/USDT">ETH/USDT</option>
+                            </optgroup>
+                            <optgroup label="Stocks">
+                                <option value="AAPL">AAPL</option>
+                                <option value="MSFT">MSFT</option>
+                                <option value="TSLA">TSLA</option>
+                                <option value="NVDA">NVDA</option>
+                                <option value="AMD">AMD</option>
+                                <option value="META">META</option>
+                                <option value="SPCX">SPCX</option>
+                            </optgroup>
                         </select>
                         <select id="marketTimeframe" class="btn" style="padding: 6px 12px; height: auto;">
                             <option value="1m">1m</option>
+                            <option value="5m">5m</option>
                             <option value="15m">15m</option>
                             <option value="1h" selected>1h</option>
+                            <option value="1d">1d</option>
                         </select>
                     </div>
                 </div>
@@ -449,7 +542,7 @@
                 <!-- Positions table -->
                 <div class="panel">
                     <div class="panel-header">
-                        <span class="panel-title">📊 Open Positions</span>
+                        <span class="panel-title"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>Open Positions</span>
                         <span class="panel-badge" id="posCount">0</span>
                     </div>
                     <div style="overflow-x:auto;">
@@ -473,7 +566,7 @@
                 <!-- Recent trades table -->
                 <div class="panel">
                     <div class="panel-header">
-                        <span class="panel-title">🔄 Recent Trades</span>
+                        <span class="panel-title"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>Recent Trades</span>
                         <span class="panel-badge" id="tradeCount">0</span>
                     </div>
                     <div style="overflow-x:auto;">
@@ -498,11 +591,11 @@
             <!-- Strategy Performance -->
             <div class="panel">
                 <div class="panel-header">
-                    <span class="panel-title">🎯 Strategy Performance</span>
+                    <span class="panel-title"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>Strategy Performance</span>
                 </div>
                 <div class="strat-grid" id="stratGrid">
                     <div class="strat-card">
-                        <div class="name">Scalping</div>
+                        <div class="name">VWAP Reversion</div>
                         <div class="metric">—</div>
                         <div class="desc">Win Rate</div>
                     </div>
@@ -512,7 +605,7 @@
                         <div class="desc">Win Rate</div>
                     </div>
                     <div class="strat-card">
-                        <div class="name">Momentum</div>
+                        <div class="name">ML (LSTM)</div>
                         <div class="metric">—</div>
                         <div class="desc">Win Rate</div>
                     </div>
@@ -552,8 +645,8 @@
     function initChart() {
         const ctx = document.getElementById('equityChart').getContext('2d');
         const gradient = ctx.createLinearGradient(0, 0, 0, 300);
-        gradient.addColorStop(0, 'rgba(124, 58, 237, 0.3)');
-        gradient.addColorStop(1, 'rgba(124, 58, 237, 0.0)');
+        gradient.addColorStop(0, 'rgba(139, 92, 246, 0.30)');
+        gradient.addColorStop(1, 'rgba(139, 92, 246, 0.0)');
 
         equityChart = new Chart(ctx, {
             type: 'line',
@@ -562,14 +655,14 @@
                 datasets: [{
                     label: 'Equity ($)',
                     data: [],
-                    borderColor: '#7c3aed',
+                    borderColor: '#8b5cf6',
                     backgroundColor: gradient,
                     borderWidth: 2,
                     fill: true,
                     tension: 0.4,
                     pointRadius: 0,
                     pointHoverRadius: 4,
-                    pointHoverBackgroundColor: '#7c3aed',
+                    pointHoverBackgroundColor: '#8b5cf6',
                     pointHoverBorderColor: '#fff',
                     pointHoverBorderWidth: 2,
                 }],
@@ -581,10 +674,10 @@
                 plugins: {
                     legend: { display: false },
                     tooltip: {
-                        backgroundColor: 'rgba(15,19,50,0.95)',
-                        titleColor: '#e2e8f0',
-                        bodyColor: '#94a3b8',
-                        borderColor: 'rgba(255,255,255,0.1)',
+                        backgroundColor: 'rgba(19,28,46,0.97)',
+                        titleColor: '#f1f5f9',
+                        bodyColor: '#aab6c9',
+                        borderColor: 'rgba(52,66,95,0.9)',
                         borderWidth: 1,
                         cornerRadius: 8,
                         padding: 12,
@@ -874,11 +967,11 @@
             const res = await fetch('/api/bot/start', { method: 'POST' });
             const data = await res.json();
             if (data.success) {
-                showToast('▶ Bot Started', data.message, 'success');
+                showToast('Bot Started', data.message, 'success');
             } else if (data.message && data.message.includes('already running')) {
-                showToast('ℹ️ Already Running', 'Bot is already active and trading', 'info');
+                showToast('Already Running', 'Bot is already active and trading', 'info');
             } else {
-                showToast('⚠️ Notice', data.message || 'Could not start bot', 'warning');
+                showToast('Notice', data.message || 'Could not start bot', 'warning');
             }
         } catch (e) {
             showToast('Error', 'Failed to reach server', 'error');
@@ -889,7 +982,7 @@
         try {
             const res = await fetch('/api/bot/stop', { method: 'POST' });
             const data = await res.json();
-            showToast(data.success ? '⏹ Stopped' : '⚠️ Notice',
+            showToast(data.success ? 'Bot Stopped' : 'Notice',
                 data.message, data.success ? 'warning' : 'info');
         } catch (e) {
             showToast('Error', 'Failed to reach server', 'error');
@@ -897,20 +990,24 @@
     }
 
     async function emergencyStop() {
-        if (!confirm('⚠️ EMERGENCY STOP\n\nThis will close ALL positions immediately.\n\nAre you sure?'))
+        if (!confirm('EMERGENCY STOP\n\nThis will close ALL positions immediately.\n\nAre you sure?'))
             return;
         try {
             const res = await fetch('/api/bot/emergency-stop', { method: 'POST' });
             const data = await res.json();
-            showToast('🚨 EMERGENCY', data.message, 'error');
+            showToast('Emergency Stop', data.message, 'error');
         } catch (e) {
             showToast('Error', 'Failed to trigger emergency stop', 'error');
         }
     }
 
     // ── Toast notifications ────────────────────────────────────────
+    const SVG = (p) => `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
     const TOAST_ICONS = {
-        info: 'ℹ️', success: '✅', warning: '⚠️', error: '🚨',
+        info:    SVG('<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>'),
+        success: SVG('<path d="M21.8 10A10 10 0 1 1 17 3.3"/><path d="m9 11 3 3L22 4"/>'),
+        warning: SVG('<path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>'),
+        error:   SVG('<polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>'),
     };
 
     function showToast(title, message, level = 'info') {
@@ -918,7 +1015,7 @@
         const el = document.createElement('div');
         el.className = `toast toast-${level}`;
         el.innerHTML = `
-            <span class="toast-icon">${TOAST_ICONS[level] || 'ℹ️'}</span>
+            <span class="toast-icon">${TOAST_ICONS[level] || TOAST_ICONS.info}</span>
             <div class="toast-body">
                 <div class="toast-title">${escHtml(title)}</div>
                 <div class="toast-msg">${escHtml(message)}</div>
@@ -929,6 +1026,12 @@
             el.style.animation = 'slideOut 0.35s ease forwards';
             setTimeout(() => el.remove(), 350);
         }, 4000);
+    }
+
+    // ── Mobile sidebar toggle ──────────────────────────────────────
+    function toggleSidebar() {
+        const open = document.getElementById('sidebar').classList.toggle('open');
+        document.getElementById('sidebarScrim').classList.toggle('show', open);
     }
 
     // ── Helpers ─────────────────────────────────────────────────────
@@ -974,32 +1077,28 @@
                 width: container.clientWidth || 800,
                 height: container.clientHeight || 400,
                 layout: {
-                    background: { type: 'solid', color: '#0f172a' },
-                    textColor: '#94a3b8',
+                    background: { type: 'solid', color: '#0f1626' },
+                    textColor: '#aab6c9',
+                    fontFamily: "'Inter', sans-serif",
                 },
                 grid: {
-                    vertLines: { color: 'rgba(255,255,255,0.03)' },
-                    horzLines: { color: 'rgba(255,255,255,0.03)' },
+                    vertLines: { color: 'rgba(255,255,255,0.04)' },
+                    horzLines: { color: 'rgba(255,255,255,0.04)' },
                 }
             });
-            
+
             // v4 API: addCandlestickSeries, v5 API: addSeries(LightweightCharts.CandlestickSeries)
+            const candleOpts = {
+                upColor: '#10b981',
+                downColor: '#f43f5e',
+                borderVisible: false,
+                wickUpColor: '#10b981',
+                wickDownColor: '#f43f5e',
+            };
             if (typeof lwChart.addCandlestickSeries === 'function') {
-                candleSeries = lwChart.addCandlestickSeries({
-                    upColor: '#10b981',
-                    downColor: '#ef4444',
-                    borderVisible: false,
-                    wickUpColor: '#10b981',
-                    wickDownColor: '#ef4444',
-                });
+                candleSeries = lwChart.addCandlestickSeries(candleOpts);
             } else {
-                candleSeries = lwChart.addSeries(LightweightCharts.CandlestickSeries, {
-                    upColor: '#10b981',
-                    downColor: '#ef4444',
-                    borderVisible: false,
-                    wickUpColor: '#10b981',
-                    wickDownColor: '#ef4444',
-                });
+                candleSeries = lwChart.addSeries(LightweightCharts.CandlestickSeries, candleOpts);
             }
             
             // Handle window resize
@@ -1032,36 +1131,46 @@
         const timeframe = document.getElementById('marketTimeframe').value;
         const url = `/api/chart_data?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}&limit=200`;
         
-        // Debug DIV injection
+        // Status overlay (subtle badge, top-left)
         let debugDiv = document.getElementById('debugLWC');
         if (!debugDiv) {
             debugDiv = document.createElement('div');
             debugDiv.id = 'debugLWC';
             debugDiv.style.position = 'absolute';
-            debugDiv.style.top = '10px';
-            debugDiv.style.left = '10px';
-            debugDiv.style.color = '#10b981';
-            debugDiv.style.zIndex = '999';
+            debugDiv.style.top = '12px';
+            debugDiv.style.left = '12px';
+            debugDiv.style.zIndex = '5';
             debugDiv.style.fontSize = '12px';
+            debugDiv.style.fontVariantNumeric = 'tabular-nums';
+            debugDiv.style.padding = '4px 10px';
+            debugDiv.style.borderRadius = '999px';
+            debugDiv.style.background = 'rgba(19,28,46,0.85)';
+            debugDiv.style.border = '1px solid var(--border)';
+            debugDiv.style.pointerEvents = 'none';
             document.getElementById('lwChartContainer').appendChild(debugDiv);
         }
-        
-        debugDiv.innerText = `Fetching ${symbol} ${timeframe}...`;
-        
+
+        const isStock = !symbol.includes('/');
+        debugDiv.style.color = 'var(--text-muted)';
+        debugDiv.innerText = `Loading ${symbol} · ${timeframe}…`;
+
         try {
             const data = await fetchAPI(url);
             if (data && data.length > 0) {
                 candleSeries.setData(data);
                 lwChart.timeScale().fitContent();
-                debugDiv.innerText = `Rendered ${data.length} candles. Last Price: ${data[data.length-1].close}`;
+                debugDiv.style.color = 'var(--text-dim)';
+                debugDiv.innerText = `${symbol} · ${timeframe} · ${data.length} bars · $${Number(data[data.length-1].close).toFixed(2)}`;
             } else {
-                debugDiv.innerText = `No data returned for ${symbol} ${timeframe}.`;
-                debugDiv.style.color = '#ef4444';
+                debugDiv.style.color = 'var(--yellow)';
+                debugDiv.innerText = isStock
+                    ? `No data for ${symbol} — market may be closed or data delayed`
+                    : `No data for ${symbol} ${timeframe}`;
             }
         } catch (err) {
             console.error("Chart Error:", err);
-            debugDiv.innerText = `Error: ${err.message}`;
-            debugDiv.style.color = '#ef4444';
+            debugDiv.style.color = 'var(--red)';
+            debugDiv.innerText = `Error loading ${symbol}: ${err.message}`;
         }
     }
     </script>

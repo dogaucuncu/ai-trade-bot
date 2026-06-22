@@ -54,13 +54,16 @@
 ### Yapay Zeka & Makine Öğrenmesi
 - **LSTM Derin Öğrenme Modeli** — Küçük LSTM ağı (hidden 48, 1 katman) ile fiyat yönü tahmini (UP / DOWN / SIDEWAYS)
 - **Durağan (stationary) özellikler** — Ham fiyat seviyeleri yerine getiri/oran-bazlı 15 özellik; lookahead-bias'sız scaler; sınıf ağırlıkları
-- **Duygu Analizi** — Haber başlıkları için keyword-bazlı sentiment analizi + Crypto Fear & Greed Index entegrasyonu
+- **Duygu Analizi & Haber Risk Kapısı** — Keyword-bazlı sentiment + Crypto Fear & Greed Index, ücretsiz/keyless haber kaynaklarıyla (RSS + Alpaca News) beslenir. Emir öncesi **muhafazakâr risk kapısı** olarak işler (kötü habere karşı işlem açmayı engeller). **Tamamen Claude/LLM'siz** — runtime'da token harcamaz. Varsayılan kapalı, opt-in (bkz. `.env`)
 
 ### Strateji Motoru (kanıt-temelli)
-- **Mean Reversion** (15m) — Z-score ortalamaya dönüş. **Aktif** — bulunan tek kural-bazlı edge
+- **VWAP Reversion** (15m) — Hacim-ağırlıklı ortalamaya dönüş. **Aktif** — `strategy_eval`'de tüm 5 coinde PF>1 (en güçlü in-sample edge). _OOS marjinal; paper'da forward-test şart._
+- **Mean Reversion** (15m) — Z-score ortalamaya dönüş. **Aktif** — kural-bazlı edge (AVAX/DOGE)
 - **ML Strategy** (15m) — LSTM tahminlerine dayalı; yalnızca eğitilmiş, uyumlu modeli olan coinlerde (ör. DOGE) çalışır
+- **Breakout** (1h) — Donchian kanal kopuşu. Uygulanmış ama **KAPALI** (PF<1 her coinde)
 - **Scalping & Momentum** — Uygulanmış ama **varsayılan olarak KAPALI** (dürüst backtestlerde komisyon sonrası para kaybediyorlardı — bkz. [Dürüst Backtesting](#dürüst-backtesting--edge-durumu))
 - **Ensemble** — Ağırlıklı oylama altyapısı (opsiyonel)
+- **Parametre Optimizasyonu** — `backtest/optimize.py` ile in-sample/out-of-sample bölmeli grid-search + overfit uyarısı
 
 ### Dürüst Backtesting Altyapısı
 - **Leak-free walk-forward** — Model her fold'da geçmişte eğitilip yalnızca görülmemiş gelecekte test edilir
@@ -76,8 +79,9 @@
 
 ### Çoklu Borsa Desteği
 - **Binance** — Kripto para çiftleri (SOL, AVAX, XRP, ADA, DOGE — `CRYPTO_SYMBOLS` ile yapılandırılabilir)
-- **Alpaca Markets** — ABD hisse senetleri (AAPL, MSFT, TSLA, NVDA, AMD, META) + fractional shares
+- **Alpaca Markets** — ABD hisse senetleri (AAPL, MSFT, TSLA, NVDA, AMD, META) + fractional shares. **Hisse veri feed'i artık canlı** (IEX feed, ücretsiz plan) — piyasa-saatleri kontrolüyle yalnızca borsa açıkken işler
 - **Paper & Live Mode** — Testnet üzerinde paper trading veya gerçek hesapla canlı trading
+- **TLS araya girme uyumu** — `truststore` ile OS sertifika mağazası kullanılır (kurumsal proxy/AV SSL inspection olan ağlarda HTTPS'i, doğrulamayı kapatmadan çözer)
 
 ### Gerçek Zamanlı Dashboard
 - **WebSocket** ile canlı veri akışı
@@ -87,8 +91,8 @@
 - **Performans İstatistikleri** — Win rate, Sharpe ratio, equity curve
 
 ### Bildirim Sistemi
-- **E-posta Bildirimleri** — SMTP üzerinden trade ve risk uyarıları
-- **WebSocket Push** — Dashboard üzerinden anlık bildirimler
+- **E-posta Bildirimleri** — SMTP üzerinden; engine'e bağlı: pozisyon açılış/kapanış, acil durdurma (circuit breaker) ve günlük P&L özeti
+- **WebSocket Push** — Dashboard üzerinden anlık bildirimler (toast)
 
 ---
 
@@ -113,8 +117,10 @@
 │        │   │   Breaker    │   │ Alpaca       │
 └───┬────┘   └──────────────┘   └──────────────┘
     │
+    ├── VWAP Reversion (15m)      [aktif]
     ├── Mean Reversion (15m)      [aktif]
     ├── ML Strategy (15m, LSTM)   [model varsa]
+    ├── Breakout (1h)             [kapali]
     ├── Scalping (1m)             [kapali]
     └── Momentum (1h)             [kapali]
 
@@ -152,7 +158,8 @@ AI-Trade-Bot/
 │   │   └── scheduler.py        # Görev zamanlayıcı
 │   │
 │   ├── data/                   # Veri toplama & depolama
-│   │   ├── collector.py        # OHLCV veri toplayıcı
+│   │   ├── collector.py        # OHLCV veri toplayıcı (Binance + Alpaca/IEX)
+│   │   ├── news_feed.py        # Haber başlıkları (keyless RSS + Alpaca News)
 │   │   ├── storage.py          # SQLite async depolama (SQLAlchemy)
 │   │   └── websocket_feed.py   # Binance WebSocket canlı veri akışı
 │   │
@@ -161,8 +168,10 @@ AI-Trade-Bot/
 │   │
 │   ├── strategy/               # Trading stratejileri
 │   │   ├── base.py             # Abstract base class + Signal/Position
-│   │   ├── mean_reversion.py   # Ortalamaya dönüş (15m) — AKTİF
+│   │   ├── vwap_reversion.py   # VWAP ortalamaya dönüş (15m) — AKTİF
+│   │   ├── mean_reversion.py   # Z-score ortalamaya dönüş (15m) — AKTİF
 │   │   ├── ml_strategy.py      # LSTM bazlı ML stratejisi (15m) — model varsa AKTİF
+│   │   ├── breakout.py         # Donchian kopuş (1h) — varsayılan KAPALI (edge yok)
 │   │   ├── scalping.py         # Scalping (1m) — varsayılan KAPALI (kârsız)
 │   │   ├── momentum.py         # Trend takip (1h) — varsayılan KAPALI (kârsız)
 │   │   └── ensemble.py         # Ağırlıklı oylama ensemble (opsiyonel)
@@ -176,6 +185,7 @@ AI-Trade-Bot/
 │   ├── risk/                   # Risk yönetimi
 │   │   ├── manager.py          # Risk kontrol merkezi
 │   │   ├── circuit_breaker.py  # Circuit breaker (4 durum)
+│   │   ├── sentiment_gate.py   # Haber/sentiment risk kapısı (Claude'suz, opt-in)
 │   │   └── position_sizer.py   # Kelly Criterion pozisyon boyutlandırma
 │   │
 │   └── execution/              # Emir yürütme
@@ -197,6 +207,7 @@ AI-Trade-Bot/
 │   ├── backtester.py           # Strateji backtester (Plotly raporları)
 │   ├── walkforward_ml.py       # Dürüst leak-free walk-forward ML backtest (--all)
 │   ├── strategy_eval.py        # Kural-bazlı stratejileri coinlerde dürüst ölç
+│   ├── optimize.py             # Parametre grid-search (IS/OOS + overfit uyarısı)
 │   ├── robustness.py           # Seed + eşik sağlamlık testi (edge gerçek mi?)
 │   └── results/                # Sonuç dosyaları (git'e dahil DEĞİL)
 │
@@ -362,6 +373,21 @@ Tüm ayarlar `config/.env` dosyasından yüklenir. Önemli parametreler:
 4. Oluşturulan 16 haneli şifreyi `SMTP_PASSWORD` olarak girin
 5. Normal Gmail şifrenizi değil, uygulama şifresini kullanın!
 
+### Sentiment / Haber Risk Kapısı (Opsiyonel, Claude'suz)
+
+Emir öncesi muhafazakâr bir haber/sentiment filtresi. Yalnızca **kötü habere
+karşı işlem açmayı engeller**; işlem başlatmaz ve **hiçbir LLM/Claude çağrısı
+yapmaz** (keyword + Fear&Greed + ücretsiz RSS/Alpaca News). Önce gözlem modunda
+(`GATE=false`) loglardan skorları izleyin, güvendikten sonra `GATE=true` yapın.
+
+| Parametre | Varsayılan | Açıklama |
+|-----------|-----------|----------|
+| `SENTIMENT_ENABLED` | `false` | Kapı için ana anahtar |
+| `SENTIMENT_GATE` | `false` | `true` = veto uygula; `false` = sadece gözlemle/logla |
+| `SENTIMENT_THRESHOLD` | `0.5` | "Güçlü" sayılan \|skor\| eşiği |
+| `SENTIMENT_CACHE_TTL` | `1800` | Sembol başına skor önbelleği (saniye) |
+| `CRYPTOPANIC_TOKEN` | — | Opsiyonel ücretsiz CryptoPanic token'ı (yoksa RSS kullanılır) |
+
 ### Risk Parametreleri (Hardcoded — `config/settings.py`)
 
 | Parametre | Değer | Açıklama |
@@ -408,6 +434,9 @@ python -m backtest.walkforward_ml --all --tf 15m --candles 12000 --train 6000 --
 # Kural-bazlı stratejileri tüm coinlerde dürüstçe ölç (PF = edge)
 python -m backtest.strategy_eval
 
+# Strateji parametrelerini tara (in-sample/out-of-sample + overfit uyarısı)
+python -m backtest.optimize --strategy vwap_reversion --symbol DOGE/USDT --tf 15m
+
 # Bir coin'in edge'i gerçek mi, şans mı? (seed + eşik sağlamlık testi)
 python -m backtest.robustness --symbol DOGE/USDT --tf 15m
 ```
@@ -438,15 +467,23 @@ http://127.0.0.1:8000
 > Stratejiler **dürüst out-of-sample backtestten geçirildi** ve canlı motorda yalnızca
 > edge gösterenler aktif. Sonuçlar için [Dürüst Backtesting](#dürüst-backtesting--edge-durumu).
 
+### VWAP Reversion (15m) — AKTİF
+- **Sinyal:** Fiyatın rolling VWAP'tan sapması band'ı (varsayılan %1.5) aşınca ortalamaya dönüş alış/satış + hacim onayı; VWAP'a dönünce erken çıkış
+- **SL/TP:** %1.5 stop / %1.5 hedef
+- **Durum:** `strategy_eval`'de **5/5 coinde PF>1** (DOGE 1.78, SOL 1.56, AVAX 1.27, XRP 1.23, ADA 1.03) — pakedeki en güçlü in-sample edge. **Dürüstlük notu:** 70/30 IS/OOS bölmesinde OOS edge'i marjinal (SOL ~0.95, AVAX ~0.87); `mean_reversion` ile aynı çıtada olduğu için **paper forward-test** amacıyla aktif. Kripto + hisselerde çalışır.
+
 ### Mean Reversion (15m) — AKTİF
 - **Sinyal:** Close fiyatının EMA(21)'e göre Z-score'u < −2 (alış) / > +2 (satış) + hacim onayı
 - **SL/TP:** %1.5 stop / %1.5 hedef
-- **Durum:** Bulunan tek kural-bazlı edge (en iyi AVAX PF 1.24, SOL PF 1.03)
+- **Durum:** Kural-bazlı edge (AVAX PF 1.14, DOGE PF 1.11). Kripto + hisselerde çalışır.
 
 ### ML Strategy (15m) — model varsa AKTİF
 - **Sinyal:** LSTM yön tahmini (UP/DOWN), güven > %40
 - **SL/TP:** %1.5 stop / %3 hedef
-- **Durum:** Yalnızca eğitilmiş + uyumlu modeli olan coinde çalışır (backtestte sadece DOGE edge gösterdi)
+- **Durum:** Yalnızca eğitilmiş + uyumlu modeli olan coinde çalışır (backtestte sadece DOGE edge gösterdi). Kripto-only.
+
+### Breakout (1h) — varsayılan KAPALI
+- Donchian kanal kopuşu + hacim onayı, ATR-tabanlı stop. **Tüm coinlerde PF<1 (0.73–0.91)** → edge yok.
 
 ### Scalping (1m) — varsayılan KAPALI
 - RSI + Bollinger + hacim. **Tüm coinlerde PF 0.2–0.4** → %0.4 hedef, %0.2 komisyonu kaldıramıyor. Yapısal olarak kârsız.
@@ -455,6 +492,7 @@ http://127.0.0.1:8000
 - MACD + EMA crossover. **Tüm coinlerde PF 0.45–0.88** → komisyon sonrası kaybediyor.
 
 > Stratejileri `src/bot/engine.py` içindeki `enabled_strategies` ile aç/kapat.
+> Yeni bir stratejinin parametrelerini taramak için: `python -m backtest.optimize --strategy <ad> --symbol <coin> --tf <tf>`
 
 ---
 
@@ -494,9 +532,11 @@ Hacim            : volume_ratio
 - **Leak-free walk-forward** — gerçek out-of-sample değerlendirme (`backtest/walkforward_ml.py`)
 
 ### Sentiment Analizi
-- **Keyword-based** — 25 pozitif + 29 negatif borsa terimlerini tarar
+- **Keyword-based** — 25 pozitif + 28 negatif borsa terimlerini tarar (LLM yok)
 - **Fear & Greed Index** — alternative.me API'den otomatik çekim
 - **Kombine skor** — Başlıklar %60 + FGI %40 ağırlıklı harmanlama
+- **Haber kaynağı** — `src/data/news_feed.py`: ücretsiz/keyless RSS (kripto) + Alpaca News (hisse)
+- **Risk kapısı** — `src/risk/sentiment_gate.py` ile emir öncesi muhafazakâr veto (opt-in; bkz. [Sentiment config](#sentiment--haber-risk-kapısı-opsiyonel-claudesuz))
 
 ---
 
@@ -626,8 +666,11 @@ pytest
 # API bağlantı testleri
 python test_api.py
 
-# Strateji testleri
+# Strateji testleri (canlı veri)
 python test_strategy.py
+
+# Yeni geliştirmelerin birim testleri (offline, ağ mock'lu)
+pytest test_enhancements.py -q
 ```
 
 ---

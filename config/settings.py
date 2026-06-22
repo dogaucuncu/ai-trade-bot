@@ -116,6 +116,7 @@ class AlpacaSettings:
         "NVDA",
         "AMD",
         "META",
+        "SPCX",  # SpaceX — IPO'd on NASDAQ 2026-06-12
     )
 
 
@@ -130,6 +131,22 @@ class RiskSettings:
     max_stock_positions: int = 1            # 1 stock slot
     max_portfolio_exposure: float = 0.30    # 30 % of capital in market
     max_drawdown: float = 0.15              # 15 % absolute max drawdown
+
+
+@dataclass(frozen=True, slots=True)
+class SentimentSettings:
+    """News/sentiment risk-gate settings (Claude-free, opt-in).
+
+    The gate is applied before order execution and only *blocks* trades that
+    fight strongly adverse news/market mood. It never initiates trades and makes
+    no LLM calls.
+    """
+
+    enabled: bool = False           # master switch for the sentiment gate
+    gate: bool = False              # True = enforce vetoes; False = observe only
+    threshold: float = 0.5          # |score| beyond which sentiment is "strong"
+    cache_ttl: float = 1800.0       # per-symbol score cache (seconds)
+    cryptopanic_token: str = ""     # optional free CryptoPanic token
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,6 +203,7 @@ class Settings:
     alpaca: AlpacaSettings = field(default_factory=AlpacaSettings)
     risk: RiskSettings = field(default_factory=RiskSettings)
     smtp: SmtpSettings = field(default_factory=SmtpSettings)
+    sentiment: SentimentSettings = field(default_factory=SentimentSettings)
 
     # -----------------------------------------------------------------
     # Factory
@@ -226,6 +244,13 @@ class Settings:
                 paper=_env_bool("ALPACA_PAPER", default=True),
             ),
             risk=RiskSettings(),
+            sentiment=SentimentSettings(
+                enabled=_env_bool("SENTIMENT_ENABLED", default=False),
+                gate=_env_bool("SENTIMENT_GATE", default=False),
+                threshold=_env_float("SENTIMENT_THRESHOLD", 0.5),
+                cache_ttl=_env_float("SENTIMENT_CACHE_TTL", 1800.0),
+                cryptopanic_token=_env("CRYPTOPANIC_TOKEN"),
+            ),
             smtp=SmtpSettings(
                 host=_env("SMTP_HOST", "smtp.gmail.com"),
                 port=_env_int("SMTP_PORT", 587),

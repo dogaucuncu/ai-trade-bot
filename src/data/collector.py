@@ -25,6 +25,7 @@ from typing import Optional
 
 import ccxt.async_support as ccxt_async
 import pandas as pd
+from alpaca.data.enums import DataFeed
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
@@ -91,6 +92,12 @@ class DataCollector:
                     secret_key=alpaca_secret,
                 )
             )
+            # NOTE: On a network with TLS interception (corporate proxy / AV SSL
+            # inspection) requests to data.alpaca.markets may fail with
+            # "unable to get local issuer certificate". The secure fix is to let
+            # Python trust the OS certificate store, e.g. `pip install truststore`
+            # then `import truststore; truststore.inject_into_ssl()` at startup.
+            # We do NOT disable TLS verification here.
             logger.info("Alpaca StockHistoricalDataClient initialised.")
         else:
             self._stock_client = None
@@ -234,12 +241,16 @@ class DataCollector:
         # Rough start estimate — slightly over-fetch, then trim
         start = end - dt.timedelta(days=max(limit // 78 + 2, 5))
 
+        # IEX feed works on Alpaca's free tier; the default SIP feed rejects
+        # recent data without a paid subscription ("subscription does not permit
+        # querying recent SIP data").
         request = StockBarsRequest(
             symbol_or_symbols=symbol,
             timeframe=tf,
             start=start,
             end=end,
             limit=limit,
+            feed=DataFeed.IEX,
         )
 
         logger.debug("Fetching {} {} bars for {}", limit, timeframe, symbol)
@@ -256,7 +267,13 @@ class DataCollector:
             )
 
         records: list[dict] = []
-        bar_set = bars[symbol] if symbol in bars else []
+        # BarSet.__contains__ does NOT check symbols (``symbol in bars`` is False
+        # even when data exists), so index directly and fall back to ``.data``.
+        try:
+            bar_set = bars[symbol]
+        except (KeyError, TypeError):
+            data = getattr(bars, "data", {})
+            bar_set = data.get(symbol, []) if isinstance(data, dict) else []
         for bar in bar_set:
             records.append(
                 {

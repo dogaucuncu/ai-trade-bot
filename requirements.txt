@@ -16,6 +16,7 @@ ta>=0.11.0                    # Technical-analysis indicators library
 # --- Async / Networking ---
 websockets>=12.0              # WebSocket client (Binance streams)
 aiohttp>=3.9.0                # Async HTTP client
+truststore>=0.9.0            # Use OS cert store for TLS (intercepted networks)
 
 # --- Persistence ---
 sqlalchemy>=2.0.0             # ORM / SQL toolkit (async support)
