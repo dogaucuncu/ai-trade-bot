@@ -45,7 +45,7 @@
 - [API Referansı](#api-referansı)
 - [Katkıda Bulunma](#katkıda-bulunma)
 - [Lisans](#lisans)
-- [Sorumluluk Reddi](#sorumluluk-reddi)
+- [Sorumluluk Reddi / Disclaimer](#sorumluluk-reddi)
 
 ---
 
@@ -706,17 +706,75 @@ Bu proje [MIT Lisansı](LICENSE) altında lisanslanmıştır.
 
 ## Sorumluluk Reddi
 
-> **Bu yazılım yalnızca eğitim ve araştırma amaçlıdır.**
+### 🇹🇷 Türkçe
+
+> **Bu yazılım yalnızca eğitim ve araştırma amaçlıdır. Yatırım, finans, hukuk veya
+> vergi tavsiyesi DEĞİLDİR ve bu şekilde yorumlanamaz.**
 >
-> - **"Garanti getiri" diye bir şey yoktur.** Bu botun edge'i dürüstçe ölçüldü ve şu an
-> **marjinal/kanıtlanmamış** (bkz. [Edge Durumu](#ölçülen-edge-durumu-dürüst)). Hiçbir kâr vaadi yoktur.
+> **Garanti Verilmez (Hiçbir Şekilde).** Bu yazılım, açık veya zımni hiçbir garanti
+> olmaksızın **"OLDUĞU GİBİ" (AS IS)** ve **"MEVCUT HALİYLE" (AS AVAILABLE)** sunulur.
+> Geliştirici(ler); ticarete elverişlilik, belirli bir amaca uygunluk, ihlal etmeme,
+> kesintisiz/hatasız/güvenli çalışma, verilerin doğruluğu ya da herhangi bir kâr,
+> getiri veya kazanç dahil ancak bunlarla sınırlı olmamak üzere **hiçbir açık veya
+> zımni garanti, taahhüt ya da beyanda bulunmaz.**
+>
+> **Hiçbir Yasal/Mali Sorumluluk Kabul Edilmez.** Geliştirici(ler) ve katkıda
+> bulunanlar; bu yazılımın kullanımından, kullanılamamasından, hatalarından,
+> kesintilerinden, alınan işlem kararlarından veya bunların sonuçlarından doğan
+> **hiçbir doğrudan, dolaylı, arızi, özel, cezai veya sonuç niteliğindeki zarardan
+> (kâr kaybı, sermaye kaybı, veri kaybı dahil) yürürlükteki yasaların izin verdiği
+> azami ölçüde sorumlu tutulamaz.** Tüm risk ve sorumluluk tamamen kullanıcıya aittir.
+>
+> - **"Garantili getiri" diye bir şey yoktur.** Bu botun edge'i dürüstçe ölçüldü ve şu an
+>   **marjinal/kanıtlanmamış** (bkz. [Edge Durumu](#ölçülen-edge-durumu-dürüst)). Hiçbir kâr vaadi yoktur.
+> - **Geçmiş performans ve backtest sonuçları gelecekteki sonuçların göstergesi değildir.**
 > - **Önce uzun süre paper modda çalıştırın.** Gerçek paraya ancak paper'da tutarlı,
-> pozitif risk-ayarlı performans gördükten sonra geçin.
-> - Bu bot ile yapılan işlemler finansal kayıplara yol açabilir
-> - Yazılım "olduğu gibi" sunulur, hiçbir garanti verilmez
-> - Kaybetmeyi göze alamayacağınız parayı asla yatırmayın
-> - Kripto para piyasaları yüksek risk içerir; yatırım kararlarınızdan yalnızca siz sorumlusunuz
-> - Bu yazılımın geliştiricileri hiçbir mali sorumluluk kabul etmez
+>   pozitif risk-ayarlı performans gördükten sonra geçin.
+> - Bu bot ile yapılan işlemler finansal kayıplara yol açabilir; kripto ve hisse
+>   piyasaları yüksek risk içerir.
+> - **Kaybetmeyi göze alamayacağınız parayı asla yatırmayın.**
+> - Yatırım kararlarınızdan, tüm işlem, vergi ve yasal yükümlülüklerden ve bulunduğunuz
+>   ülkenin mevzuatına uyumdan **yalnızca siz sorumlusunuz.**
+> - Üçüncü taraf hizmetler (Binance, Alpaca vb.) bağımsızdır; bu proje onlarla bağlantılı
+>   değildir ve onların hizmetlerinden/kesintilerinden sorumlu değildir. Onların kullanım
+>   koşulları geçerlidir.
+> - **Bu yazılımı kullanarak bu şartların tamamını kabul etmiş sayılırsınız.**
+
+### 🇬🇧 English
+
+> **This software is for educational and research purposes only. It is NOT investment,
+> financial, legal, or tax advice and must not be construed as such.**
+>
+> **No Warranty (Whatsoever).** This software is provided **"AS IS"** and
+> **"AS AVAILABLE"**, without warranty of any kind, express or implied. The author(s)
+> make **no warranties, guarantees, or representations whatsoever**, including but not
+> limited to the implied warranties of merchantability, fitness for a particular
+> purpose, non-infringement, uninterrupted/error-free/secure operation, accuracy of
+> data, or any profit, return, or gain.
+>
+> **No Legal or Financial Liability.** To the maximum extent permitted by applicable
+> law, the author(s) and contributors **shall not be liable for any direct, indirect,
+> incidental, special, punitive, or consequential damages** (including loss of profits,
+> loss of capital, or loss of data) arising out of or in connection with the use of,
+> or inability to use, this software, its errors or interruptions, any trading
+> decisions made, or their outcomes. **All risk and responsibility rest solely with
+> the user.**
+>
+> - **There is no such thing as a "guaranteed return".** This bot's edge has been
+>   honestly measured and is currently **marginal/unproven** (see [Edge Status](#ölçülen-edge-durumu-dürüst)).
+>   No profit is promised.
+> - **Past performance and backtest results are not indicative of future results.**
+> - **Run it in paper mode for a long time first.** Only move to real money after you
+>   have seen consistent, positive risk-adjusted performance in paper trading.
+> - Trading with this bot can lead to financial losses; crypto and equity markets are
+>   high-risk.
+> - **Never invest money you cannot afford to lose.**
+> - **You alone are responsible** for your investment decisions, for all trading, tax,
+>   and legal obligations, and for compliance with the laws of your jurisdiction.
+> - Third-party services (Binance, Alpaca, etc.) are independent; this project is not
+>   affiliated with them and is not responsible for their services or outages. Their
+>   terms of use apply.
+> - **By using this software, you accept these terms in full.**
 
 ---
 
