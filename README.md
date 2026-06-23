@@ -781,7 +781,3 @@ Bu proje [MIT Lisansı](LICENSE) altında lisanslanmıştır.
 <p align="center">
  Bu projeyi beğendiyseniz yıldız vermeyi unutmayın!
 </p>
-
-<p align="center">
- Made with and AI
-</p>

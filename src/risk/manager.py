@@ -42,6 +42,8 @@ class RiskConfig:
     daily_loss_limit: float = 0.03            # halt trading after 3% daily loss
     max_drawdown: float = 0.15                # emergency stop at 15% drawdown
     max_open_positions: int = 3               # small-capital constraint
+    max_crypto_positions: int = 2             # max simultaneous crypto positions
+    max_stock_positions: int = 1              # max simultaneous stock positions
     max_portfolio_exposure: float = 0.30      # max 30% of balance in open trades
     min_order_value_usd: float = 5.0          # Binance minimum ~$5–10
     min_confidence: float = 0.45             # reject low-confidence signals
@@ -152,6 +154,26 @@ class RiskManager:
                 f"Open positions ({len(self._open_positions)}) "
                 f"at limit ({self.config.max_open_positions})"
             )
+            logger.warning("[risk] REJECTED — {}", reason)
+            return False, reason
+
+        # 5b. Per-asset-class sub-limit (curbs correlated exposure — e.g. opening
+        # SOL + AVAX + ADA longs at once is really one correlated bet). Crypto
+        # pairs carry a "/" (SOL/USDT); equities do not (AAPL) — same rule as
+        # the engine's executor routing.
+        is_crypto = "/" in signal.symbol
+        class_limit = (
+            self.config.max_crypto_positions
+            if is_crypto
+            else self.config.max_stock_positions
+        )
+        class_open = sum(
+            1 for p in self._open_positions
+            if ("/" in p.get("symbol", "")) == is_crypto
+        )
+        if class_open >= class_limit:
+            asset = "Crypto" if is_crypto else "Stock"
+            reason = f"{asset} positions ({class_open}) at limit ({class_limit})"
             logger.warning("[risk] REJECTED — {}", reason)
             return False, reason
 

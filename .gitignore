@@ -55,9 +55,12 @@ ENV/
 data/*.db
 data/*.sqlite
 data/*.sqlite3
+data/*.bak*
 *.db-journal
 *.db-wal
 *.db-shm
+# DB backups (e.g. tradebot.db.bak-20260623-141927) — keep local, never commit
+*.db.bak*
 
 # ── Log Files ─────────────────────────────────────────────────────────
 logs/
