@@ -74,8 +74,9 @@
 ### Çok Katmanlı Risk Yönetimi
 - **Circuit Breaker** — 4 durumlu (NORMAL → CAUTIOUS → HALTED → EMERGENCY) otomatik koruma sistemi
 - **Position Sizing** — Kelly Criterion bazlı optimal pozisyon boyutlandırma
-- **Risk Manager** — Günlük kayıp limiti, max drawdown, portföy maruziyeti kontrolleri
+- **Risk Manager** — Günlük kayıp limiti, max drawdown, portföy maruziyeti + korelasyon alt-limitleri
 - **Trailing Stop** — Dinamik stop-loss güncelleme mekanizması
+- **Borsa-tarafı koruyucu stop** — Canlı modda giriş sonrası borsaya gerçek bir stop-loss emri bırakılır; bot çökse/bağlantı kopsa bile pozisyon korunur (restart'ta DB'den kurtarılıp kapanışta iptal edilir)
 
 ### Çoklu Borsa Desteği
 - **Binance** — Kripto para çiftleri (SOL, AVAX, XRP, ADA, DOGE — `CRYPTO_SYMBOLS` ile yapılandırılabilir)
@@ -152,10 +153,10 @@ AI-Trade-Bot/
 │
 ├── src/                        # Ana kaynak kodu
 │   ├── __init__.py
+│   ├── net.py                  # Güvenli TLS yardımcıları (OS sertifika mağazası / truststore)
 │   │
 │   ├── bot/                    # Bot motoru
-│   │   ├── engine.py           # Ana orkestratör (trading loop)
-│   │   └── scheduler.py        # Görev zamanlayıcı
+│   │   └── engine.py           # Ana orkestratör (trading loop + zamanlama)
 │   │
 │   ├── data/                   # Veri toplama & depolama
 │   │   ├── collector.py        # OHLCV veri toplayıcı (Binance + Alpaca/IEX)
@@ -311,12 +312,15 @@ Tüm ayarlar `config/.env` dosyasından yüklenir. Önemli parametreler:
 | Parametre | Varsayılan | Açıklama |
 |-----------|-----------|----------|
 | `TRADING_MODE` | `paper` | `paper` (simülasyon) veya `live` (gerçek) |
+| `CONFIRM_LIVE_TRADING` | `false` | **Gerçek-para güvenlik kilidi.** `live` + `BINANCE_TESTNET=false` iken `true` olmadan bot başlamayı reddeder (kazara canlıya geçişi engeller) |
 | `INITIAL_CAPITAL` | `50.0` | Başlangıç sermayesi (USD) |
 | `CRYPTO_SYMBOLS` | `SOL/USDT,AVAX/USDT,XRP/USDT,ADA/USDT,DOGE/USDT` | İşlenecek coinler (virgülle) |
 | `CRYPTO_ALLOCATION` | `0.75` | Kripto'ya ayrılan oran (%75) |
 | `STOCK_ALLOCATION` | `0.25` | Hisse senedine ayrılan oran (%25) |
 | `LOG_LEVEL` | `INFO` | Log seviyesi (DEBUG/INFO/WARNING/ERROR) |
+| `DASHBOARD_HOST` | `127.0.0.1` | Dashboard host — localhost'ta bırakın (auth olmadan `0.0.0.0` yapmayın) |
 | `DASHBOARD_PORT` | `8000` | Dashboard port numarası |
+| `DASHBOARD_TOKEN` | _(boş)_ | Kontrol uçları (start/stop/emergency-stop) için token. Boşsa her çalıştırmada rastgele üretilir; sabit token için doldurun |
 
 > **Coin seçimi:** Varsayılan 5 likit coin. `$1000+` sermayeye çıkınca `BTC/USDT,ETH/USDT` eklemek mantıklı (en yüksek likidite). Tek satır: `CRYPTO_SYMBOLS=AVAX/USDT,SOL/USDT,DOGE/USDT`
 
@@ -414,6 +418,11 @@ python main.py -v
 # Live mode (gerçek para!)
 python main.py --mode live
 ```
+
+> **Gerçek-para kilidi:** `live` modu gerçek Binance hesabına (`BINANCE_TESTNET=false`)
+> bağlanacaksa, `config/.env` içinde `CONFIRM_LIVE_TRADING=true` ayarlı olmadıkça
+> bot başlamayı reddeder. Bu, kazara canlıya geçişe karşı bilinçli bir güvenlik
+> kilididir. Paper modda veya testnet'te bu ayara gerek yoktur.
 
 ### Paper Performansını Görme
 
@@ -581,6 +590,12 @@ Dashboard `http://127.0.0.1:8000` adresinde çalışır ve şunları sunar:
 - **Bot Kontrolleri** — Start, Stop, Emergency Stop
 - **WebSocket** — 2 saniyelik canlı güncelleme döngüsü
 
+> **Güvenlik:** Dashboard yalnızca `127.0.0.1` üzerinde dinler. Durum değiştiren
+> uçlar (start/stop/emergency-stop) `DASHBOARD_TOKEN` ister; token sayfaya
+> gömüldüğü için yerel arayüz çalışır, ancak başka sitelerden (CSRF) çağrılamaz.
+> CORS kendi origin'iyle sınırlı, `TrustedHostMiddleware` ile yanlış Host
+> başlıkları (DNS-rebinding) reddedilir ve WebSocket Origin kontrolü yapılır.
+
 ---
 
 ## Dürüst Backtesting & Edge Durumu
@@ -649,11 +664,14 @@ Dashboard REST API endpoints:
 | `GET` | `/api/trades` | Son 50 işlem geçmişi |
 | `GET` | `/api/signals` | Son 50 strateji sinyali |
 | `GET` | `/api/performance` | Performans istatistikleri |
-| `GET` | `/api/chart_data?symbol=DOGE/USDT&timeframe=1h` | OHLCV grafik verisi |
-| `POST` | `/api/bot/start` | Botu başlat |
-| `POST` | `/api/bot/stop` | Botu durdur |
-| `POST` | `/api/bot/emergency-stop` | Acil durdurma (tüm pozisyonları kapat) |
-| `WS` | `/ws` | WebSocket canlı veri akışı |
+| `GET` | `/api/chart_data?symbol=DOGE/USDT&timeframe=1h` | OHLCV grafik verisi (symbol/timeframe yapılandırılmış evrenle sınırlı) |
+| `POST` | `/api/bot/start` | Botu başlat — `X-Dashboard-Token` gerekir |
+| `POST` | `/api/bot/stop` | Botu durdur — `X-Dashboard-Token` gerekir |
+| `POST` | `/api/bot/emergency-stop` | Acil durdurma (tüm pozisyonları kapat) — `X-Dashboard-Token` gerekir |
+| `WS` | `/ws` | WebSocket canlı veri akışı (Origin kontrollü) |
+
+> **Not:** `POST` kontrol uçları `DASHBOARD_TOKEN` ile korunur (`X-Dashboard-Token`
+> başlığı). Yerel dashboard arayüzü token'ı otomatik gönderir.
 
 ---
 
