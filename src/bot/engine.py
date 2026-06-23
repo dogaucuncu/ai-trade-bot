@@ -172,7 +172,10 @@ class BotEngine:
         self._sentiment_gate: Any = None
 
         # ---- tick counters -----------------------------------------------
-        self._tick_count = 59
+        self._tick_count = 0
+        # Wall-clock 15-minute slot last evaluated; ensures the 15m strategy set
+        # runs once per slot (and immediately on the first tick after start).
+        self._last_15m_slot: Any = None
 
         logger.info(
             "BotEngine created — capital=${:.2f} crypto={} stocks={} dry_run={}",
@@ -266,9 +269,10 @@ class BotEngine:
     async def run(self) -> None:
         """Start the main trading loop.
 
-        The loop runs every 60 seconds (1-minute tick).  Scalping
-        strategies fire every tick, mean reversion every 15 ticks,
-        momentum every 60 ticks.
+        Ticks are aligned to the top of each wall-clock minute. Position
+        monitoring runs every tick; the 15-minute strategy set runs once per
+        wall-clock 15-minute slot (:00/:15/:30/:45), i.e. just after each 15m
+        candle closes — see :meth:`_tick`.
         """
         self._running = True
         self._install_signal_handlers()
@@ -285,10 +289,16 @@ class BotEngine:
                 except Exception:
                     logger.exception("Unhandled exception in tick {}", tick)
 
-                # Sleep 60 seconds (one-minute candle period)
+                # Sleep until the top of the next minute so ticks stay aligned to
+                # wall-clock minutes (a fixed 60s sleep drifts by the tick's own
+                # processing time, pushing the 15m slot away from candle close).
+                now = datetime.now(timezone.utc)
+                sleep_s = 60.0 - (now.second + now.microsecond / 1_000_000)
+                if sleep_s <= 0:
+                    sleep_s = 60.0
                 try:
                     await asyncio.wait_for(
-                        self._shutdown_event.wait(), timeout=60.0
+                        self._shutdown_event.wait(), timeout=sleep_s
                     )
                 except asyncio.TimeoutError:
                     pass  # normal: timeout means next tick
@@ -337,30 +347,38 @@ class BotEngine:
         # 3. Monitor open positions first
         await self._monitor_positions()
 
-        # 4. Run the evidence-based strategy set at their intervals.
-        # Mean reversion every 15 ticks (15m) — the only rule edge found.
-        if "mean_reversion" in self.enabled_strategies and tick % 15 == 0:
+        # 4. Run the evidence-based strategy set once per wall-clock 15-minute
+        # slot. Using the real clock (not a tick counter) keeps evaluation
+        # aligned to actual 15m candle closes and de-dupes if a tick repeats
+        # within the same slot.
+        now = datetime.now(timezone.utc)
+        slot = now.replace(minute=(now.minute // 15) * 15, second=0, microsecond=0)
+        run_15m = slot != self._last_15m_slot
+        if run_15m:
+            self._last_15m_slot = slot
+
+        # Mean reversion (15m) — the only rule edge found.
+        if "mean_reversion" in self.enabled_strategies and run_15m:
             await self._run_strategy_on_symbols(
                 self.mean_reversion, self.crypto_symbols, "15m"
             )
 
-        # VWAP reversion every 15 ticks (15m) — strongest rule edge (PF>1 on
-        # all five coins in strategy_eval).
-        if "vwap_reversion" in self.enabled_strategies and tick % 15 == 0:
+        # VWAP reversion (15m) — strongest rule edge (PF>1 on all five coins).
+        if "vwap_reversion" in self.enabled_strategies and run_15m:
             await self._run_strategy_on_symbols(
                 self.vwap_reversion, self.crypto_symbols, "15m"
             )
 
-        # ML every 15 ticks (15m), only on coins that have a trained model.
-        if "ml" in self.enabled_strategies and self.ml_symbols and tick % 15 == 0:
+        # ML (15m), only on coins that have a trained model.
+        if "ml" in self.enabled_strategies and self.ml_symbols and run_15m:
             await self._run_strategy_on_symbols(
                 self.ml_strategy, self.ml_symbols, self.ml_timeframe
             )
 
-        # Stocks: run the enabled rule strategies every 15 ticks (15m), but only
-        # while the US market is open. ML is crypto-only (no stock models), so
-        # stocks run the rule-based edges only.
-        if self.stock_symbols and tick % 15 == 0:
+        # Stocks: run the enabled rule strategies each 15m slot, but only while
+        # the US market is open. ML is crypto-only (no stock models), so stocks
+        # run the rule-based edges only.
+        if self.stock_symbols and run_15m:
             if self._is_stock_market_open():
                 for name, strat in (
                     ("mean_reversion", self.mean_reversion),
@@ -399,6 +417,12 @@ class BotEngine:
             try:
                 if isinstance(df, Exception) or df is None or df.empty:
                     continue
+
+                # Drop the still-forming candle so strategies decide on the last
+                # CLOSED bar (Binance klines returns the in-progress candle last;
+                # acting on it means trading an incomplete bar).
+                if len(df) > 1:
+                    df = df.iloc[:-1]
 
                 # Add technical indicators before analysis
                 from src.indicators.technical import TechnicalIndicators
@@ -977,6 +1001,7 @@ class BotEngine:
                 entry_time=position.entry_time,
                 strategy=position.strategy_name,
                 value_usd=value_usd,
+                stop_order_id=position.stop_order_id,
             )
         except Exception:
             logger.exception(
@@ -1045,6 +1070,7 @@ class BotEngine:
                     entry_time=r["entry_time"],
                     strategy_name=r["strategy"],
                     position_id=r["position_id"],
+                    stop_order_id=r.get("stop_order_id"),
                 )
                 self._positions[pos.position_id] = pos
                 self.risk_manager.register_open_position(

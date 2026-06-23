@@ -152,6 +152,9 @@ class OpenPosition(Base):
     entry_time: dt.datetime = Column(DateTime, nullable=False)
     strategy: str = Column(String(60), nullable=False, default="manual")
     value_usd: float = Column(Float, nullable=False, default=0.0)
+    # Exchange order id of the resting protective stop-loss (live mode). Persisted
+    # so a restart can cancel it before closing — avoids an orphaned opposite fill.
+    stop_order_id: str = Column(String(40), nullable=True)
 
     def __repr__(self) -> str:
         return (
@@ -190,10 +193,32 @@ class Storage:
     # ------------------------------------------------------------------
 
     async def init_db(self) -> None:
-        """Create all tables if they don't already exist."""
+        """Create all tables if they don't already exist, then run migrations."""
         async with self._engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            await conn.run_sync(self._migrate_schema)
         logger.info("Database tables verified / created.")
+
+    @staticmethod
+    def _migrate_schema(conn) -> None:  # noqa: ANN001 — sync SQLAlchemy connection
+        """Lightweight, idempotent schema migrations for existing databases.
+
+        ``create_all`` never alters existing tables, so columns added after a DB
+        was first created must be patched in by hand. SQLite supports
+        ``ALTER TABLE ... ADD COLUMN`` for nullable columns.
+        """
+        from sqlalchemy import text
+
+        # open_positions.stop_order_id (added for live-restart stop recovery)
+        cols = {
+            row[1]
+            for row in conn.execute(text("PRAGMA table_info(open_positions)"))
+        }
+        if "stop_order_id" not in cols:
+            conn.execute(
+                text("ALTER TABLE open_positions ADD COLUMN stop_order_id VARCHAR(40)")
+            )
+            logger.info("[storage] Migrated: added open_positions.stop_order_id")
 
     async def close(self) -> None:
         """Dispose of the engine connection pool."""
@@ -495,6 +520,7 @@ class Storage:
         entry_time: dt.datetime,
         strategy: str = "manual",
         value_usd: float = 0.0,
+        stop_order_id: str | None = None,
     ) -> None:
         """Insert or replace an open-position row."""
         async with self._session_factory() as session:
@@ -514,6 +540,7 @@ class Storage:
                     entry_time=entry_time,
                     strategy=strategy,
                     value_usd=value_usd,
+                    stop_order_id=stop_order_id,
                 )
             )
             await session.commit()
@@ -546,6 +573,7 @@ class Storage:
                 "entry_time": r.entry_time,
                 "strategy": r.strategy,
                 "value_usd": r.value_usd,
+                "stop_order_id": r.stop_order_id,
             }
             for r in rows
         ]

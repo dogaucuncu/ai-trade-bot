@@ -2,54 +2,56 @@
 # AI Trade Bot — Python Dependencies
 # ============================================================
 # Install:  pip install -r requirements.txt
+# Versions are PINNED to the known-working set in this environment.
+# Bump deliberately (test after) rather than floating with >=.
 # ============================================================
 
 # --- Exchange Connectivity ---
-ccxt>=4.0.0                   # Unified crypto-exchange API (Binance, etc.)
-alpaca-py>=0.21.0             # Alpaca Markets SDK for US equities
+ccxt==4.5.54                  # Unified crypto-exchange API (Binance, etc.)
+alpaca-py==0.43.4             # Alpaca Markets SDK for US equities
 
 # --- Data & Analysis ---
-pandas>=2.0.0                 # DataFrames / time-series wrangling
-numpy>=1.24.0                 # Numerical computing
-ta>=0.11.0                    # Technical-analysis indicators library
+pandas==3.0.3                 # DataFrames / time-series wrangling
+numpy==2.4.6                  # Numerical computing
+ta==0.11.0                    # Technical-analysis indicators library
 
 # --- Async / Networking ---
-websockets>=12.0              # WebSocket client (Binance streams)
-aiohttp>=3.9.0                # Async HTTP client
-truststore>=0.9.0            # Use OS cert store for TLS (intercepted networks)
+websockets==16.0              # WebSocket client (Binance streams)
+aiohttp==3.13.5               # Async HTTP client
+truststore==0.10.4            # Use OS cert store for TLS (intercepted networks)
 
 # --- Persistence ---
-sqlalchemy>=2.0.0             # ORM / SQL toolkit (async support)
-aiosqlite>=0.19.0             # Async SQLite driver for SQLAlchemy
-redis>=5.0.0                  # Redis client (caching / pub-sub)
+sqlalchemy==2.0.49            # ORM / SQL toolkit (async support)
+aiosqlite==0.22.1             # Async SQLite driver for SQLAlchemy
+redis==7.4.0                  # Redis client (caching / pub-sub)
 
 # --- Scheduling ---
-schedule>=1.2.0               # Simple job scheduling
-apscheduler>=3.10.0           # Advanced scheduling (cron-like)
+schedule==1.2.2               # Simple job scheduling
+apscheduler==3.11.2           # Advanced scheduling (cron-like)
 
 # --- Machine Learning ---
-torch>=2.0.0                  # PyTorch deep-learning framework
-scikit-learn>=1.3.0           # MinMaxScaler, classification metrics
-transformers>=4.30.0          # Hugging Face Transformers
+torch==2.12.0                 # PyTorch deep-learning framework
+scikit-learn==1.8.0           # MinMaxScaler, classification metrics
+transformers==5.8.1           # Hugging Face Transformers
 
 # --- Web / API ---
-fastapi>=0.110.0              # Async web framework (dashboard API)
-uvicorn>=0.27.0               # ASGI server for FastAPI
-jinja2>=3.1.0                 # HTML templating
-python-jose>=3.3.0            # JWT authentication
+fastapi==0.136.1              # Async web framework (dashboard API)
+uvicorn==0.47.0               # ASGI server for FastAPI
+jinja2==3.1.6                 # HTML templating
+python-jose==3.5.0            # JWT authentication
 
 # --- Notifications ---
-aiosmtplib>=3.0.0             # Async SMTP e-mail sending
+aiosmtplib==5.1.0             # Async SMTP e-mail sending
 
 # --- Visualization ---
-plotly>=5.18.0                # Interactive charting
+plotly==6.7.0                 # Interactive charting
 
 # --- Configuration ---
-python-dotenv>=1.0.0          # Load .env files into os.environ
+python-dotenv==1.2.2          # Load .env files into os.environ
 
 # --- Logging ---
-loguru>=0.7.0                 # Modern structured logging
+loguru==0.7.3                 # Modern structured logging
 
 # --- Testing ---
-pytest>=8.0.0                 # Test runner
-pytest-asyncio>=0.23.0        # Async test support for pytest
+pytest==9.0.3                 # Test runner
+pytest-asyncio==1.3.0         # Async test support for pytest

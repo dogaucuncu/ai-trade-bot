@@ -71,6 +71,16 @@ _ALLOWED_HOSTS: list[str] = list(
     {settings.dashboard_host, "127.0.0.1", "localhost"}
 )
 
+# Symbols/timeframes the chart endpoint will fetch. The symbol is interpolated
+# into the Binance REST URL, so constrain it to the configured universe rather
+# than passing arbitrary user input through.
+_ALLOWED_SYMBOLS: frozenset[str] = frozenset(
+    set(settings.binance.default_pairs) | set(settings.alpaca.default_symbols)
+)
+_ALLOWED_TIMEFRAMES: frozenset[str] = frozenset(
+    {"1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d"}
+)
+
 
 def require_token(
     x_dashboard_token: str | None = Header(default=None),
@@ -363,6 +373,16 @@ async def api_positions() -> list[dict[str, Any]]:
 @app.get("/api/chart_data")
 async def api_chart_data(symbol: str = "DOGE/USDT", timeframe: str = "1h", limit: int = 300) -> list[dict[str, Any]]:
     """Return historical OHLCV data for TradingView Lightweight Charts."""
+    # Constrain inputs: symbol must be in the configured universe, timeframe must
+    # be a known interval, limit is clamped. The symbol flows into a Binance URL.
+    if symbol not in _ALLOWED_SYMBOLS or timeframe not in _ALLOWED_TIMEFRAMES:
+        logger.warning(
+            "[dashboard] chart_data rejected unknown symbol/timeframe: {} {}",
+            symbol, timeframe,
+        )
+        return []
+    limit = max(1, min(int(limit), 1000))
+
     engine = state.engine
     if engine is None:
         return []
