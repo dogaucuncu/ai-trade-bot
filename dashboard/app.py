@@ -413,10 +413,43 @@ async def api_chart_data(symbol: str = "DOGE/USDT", timeframe: str = "1h", limit
         return []
 
 
+async def _fetch_db_trades(limit: int = 200) -> list[dict[str, Any]]:
+    """Return recent trades from the engine's DB (source of truth).
+
+    The engine persists every closed position via ``storage.save_trade``; the
+    dashboard reads from there so history survives restarts. Falls back to the
+    in-memory list only if no engine/storage is attached. Maps ``side`` →
+    ``action`` so the frontend's existing rendering works unchanged.
+    """
+    engine = state.engine
+    storage = getattr(engine, "storage", None) if engine is not None else None
+    if storage is not None:
+        try:
+            rows = await storage.get_trades(limit=limit)
+            return [
+                {
+                    "timestamp": r["timestamp"],
+                    "symbol": r["symbol"],
+                    "side": r["side"],
+                    "action": (r["side"] or "").upper(),
+                    "price": r["price"],
+                    "quantity": r["quantity"],
+                    "pnl": r["pnl"] or 0.0,
+                    "strategy": r["strategy"],
+                    "status": r["status"],
+                }
+                for r in rows
+            ]
+        except Exception:
+            logger.exception("[dashboard] DB trade fetch failed — using in-memory")
+    return list(state.recent_trades)
+
+
 @app.get("/api/trades")
 async def api_trades() -> list[dict[str, Any]]:
-    """Recent trade history (last 50)."""
-    return state.recent_trades[:50]
+    """Recent trade history (last 50) — from the persisted DB."""
+    trades = await _fetch_db_trades(limit=50)
+    return trades[:50]
 
 
 @app.get("/api/signals")
@@ -425,10 +458,23 @@ async def api_signals() -> list[dict[str, Any]]:
     return state.recent_signals[:50]
 
 
+async def _fetch_db_equity_curve(limit: int = 2000) -> list[dict[str, Any]]:
+    """Return the equity curve from the engine's DB (falls back to in-memory)."""
+    engine = state.engine
+    storage = getattr(engine, "storage", None) if engine is not None else None
+    if storage is not None:
+        try:
+            return await storage.get_equity_curve(limit=limit)
+        except Exception:
+            logger.exception("[dashboard] DB equity fetch failed — using in-memory")
+    return state.daily_equity_curve
+
+
 @app.get("/api/performance")
 async def api_performance() -> dict[str, Any]:
-    """Daily / weekly / monthly performance statistics."""
-    trades = state.recent_trades
+    """Daily / weekly / monthly performance statistics (from the persisted DB)."""
+    trades = await _fetch_db_trades(limit=1000)
+    equity_curve = await _fetch_db_equity_curve()
     if not trades:
         return {
             "total_trades": 0,
@@ -441,7 +487,7 @@ async def api_performance() -> dict[str, Any]:
             "profit_factor": 0.0,
             "best_trade": 0.0,
             "worst_trade": 0.0,
-            "equity_curve": state.daily_equity_curve,
+            "equity_curve": equity_curve,
             "strategy_stats": {},
         }
 
@@ -490,7 +536,7 @@ async def api_performance() -> dict[str, Any]:
         ),
         "best_trade": round(max(pnls) if pnls else 0.0, 4),
         "worst_trade": round(min(pnls) if pnls else 0.0, 4),
-        "equity_curve": state.daily_equity_curve,
+        "equity_curve": equity_curve,
         "strategy_stats": strategy_stats,
     }
 
