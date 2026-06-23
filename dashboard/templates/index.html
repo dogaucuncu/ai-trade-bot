@@ -3,6 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Control-endpoint auth token, injected server-side. Same-origin only:
+         cross-site/CSRF pages cannot read it, so they cannot call the bot
+         start/stop/emergency-stop endpoints. -->
+    <meta name="dashboard-token" content="{{ dashboard_token }}">
     <title>AI Trade Bot — Dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -962,9 +966,19 @@
         }
     }
 
+    // Control endpoints require the injected token (CSRF protection).
+    const DASHBOARD_TOKEN =
+        document.querySelector('meta[name="dashboard-token"]')?.content || '';
+    function botControl(path) {
+        return fetch(path, {
+            method: 'POST',
+            headers: { 'X-Dashboard-Token': DASHBOARD_TOKEN },
+        });
+    }
+
     async function botStart() {
         try {
-            const res = await fetch('/api/bot/start', { method: 'POST' });
+            const res = await botControl('/api/bot/start');
             const data = await res.json();
             if (data.success) {
                 showToast('Bot Started', data.message, 'success');
@@ -980,7 +994,7 @@
 
     async function botStop() {
         try {
-            const res = await fetch('/api/bot/stop', { method: 'POST' });
+            const res = await botControl('/api/bot/stop');
             const data = await res.json();
             showToast(data.success ? 'Bot Stopped' : 'Notice',
                 data.message, data.success ? 'warning' : 'info');
@@ -993,7 +1007,7 @@
         if (!confirm('EMERGENCY STOP\n\nThis will close ALL positions immediately.\n\nAre you sure?'))
             return;
         try {
-            const res = await fetch('/api/bot/emergency-stop', { method: 'POST' });
+            const res = await botControl('/api/bot/emergency-stop');
             const data = await res.json();
             showToast('Emergency Stop', data.message, 'error');
         } catch (e) {

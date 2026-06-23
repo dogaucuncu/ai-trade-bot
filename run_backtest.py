@@ -6,6 +6,7 @@ import aiohttp
 
 from backtest.backtester import Backtester
 from src.strategy.ensemble import EnsembleStrategy
+from src.net import verified_ssl_context
 
 async def fetch_historical_data(symbol: str, timeframe: str, limit: int = 1000) -> pd.DataFrame:
     """Fetch historical data from Binance for backtesting."""
@@ -22,7 +23,7 @@ async def fetch_historical_data(symbol: str, timeframe: str, limit: int = 1000) 
         f"?symbol={binance_symbol}&interval={interval}&limit={limit}"
     )
     
-    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=verified_ssl_context())) as session:
         async with session.get(url) as resp:
             if resp.status != 200:
                 print(f"Failed to fetch data: HTTP {resp.status}")

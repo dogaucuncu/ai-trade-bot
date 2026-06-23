@@ -33,6 +33,7 @@ from loguru import logger
 
 from config.settings import Settings
 from src.data.storage import Storage
+from src.net import verified_ssl_context
 
 # ── Timeframe mapping helpers ───────────────────────────────────────────
 
@@ -134,7 +135,7 @@ class DataCollector:
         remaining = limit
         end_time = None
 
-        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
+        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=verified_ssl_context())) as session:
             while remaining > 0:
                 fetch_amount = min(remaining, 1000)
                 url = (

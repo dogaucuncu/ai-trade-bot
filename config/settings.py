@@ -197,6 +197,19 @@ class Settings:
     # -- Dashboard --------------------------------------------------------
     dashboard_host: str = "127.0.0.1"
     dashboard_port: int = 8000
+    # Shared secret required to call state-changing dashboard endpoints
+    # (start/stop/emergency-stop). When left blank a random token is generated
+    # at startup and injected into the served page, so the local UI keeps
+    # working while cross-site/CSRF callers (which can't read the token) are
+    # rejected. Set explicitly to keep a stable token across restarts.
+    dashboard_token: str = ""
+
+    # -- Live-trading safety ---------------------------------------------
+    # Defense-in-depth: trading live against the REAL exchange (trading_mode
+    # == "live" AND binance.testnet is False) is refused at startup unless this
+    # is explicitly set true. Prevents a single stray TRADING_MODE/--mode flag
+    # from arming real money. Has no effect in paper mode or on testnet.
+    confirm_live_trading: bool = False
 
     # -- Sub-configs (populated by ``from_env``) --------------------------
     binance: BinanceSettings = field(default_factory=BinanceSettings)
@@ -232,6 +245,8 @@ class Settings:
             redis_url=_env("REDIS_URL", "redis://localhost:6379/0"),
             dashboard_host=_env("DASHBOARD_HOST", "127.0.0.1"),
             dashboard_port=_env_int("DASHBOARD_PORT", 8000),
+            dashboard_token=_env("DASHBOARD_TOKEN", ""),
+            confirm_live_trading=_env_bool("CONFIRM_LIVE_TRADING", default=False),
             binance=BinanceSettings(
                 api_key=_env("BINANCE_API_KEY"),
                 secret_key=_env("BINANCE_SECRET_KEY"),
@@ -302,6 +317,32 @@ class Settings:
     def stock_capital(self) -> float:
         """Capital allocated to stock trading."""
         return self.initial_capital * self.stock_allocation
+
+    @property
+    def is_real_money_trading(self) -> bool:
+        """True when orders would hit a REAL (non-testnet) exchange account.
+
+        Live mode on Binance testnet is still play money; only ``live`` mode
+        with ``binance.testnet`` disabled risks real funds.
+        """
+        return self.trading_mode == "live" and not self.binance.testnet
+
+    def assert_live_trading_allowed(self) -> None:
+        """Abort startup if real-money trading is armed without confirmation.
+
+        Defense-in-depth against an accidental ``TRADING_MODE=live`` /
+        ``--mode live`` flip while real exchange keys are configured. Set
+        ``CONFIRM_LIVE_TRADING=true`` to opt in deliberately.
+        """
+        if self.is_real_money_trading and not self.confirm_live_trading:
+            raise SystemExit(
+                "REFUSING TO START: live mode against the REAL exchange "
+                "(TRADING_MODE=live, BINANCE_TESTNET=false) but "
+                "CONFIRM_LIVE_TRADING is not set. This is a safety guard — "
+                "set CONFIRM_LIVE_TRADING=true in config/.env only when you "
+                "deliberately intend to trade real funds. For paper testing "
+                "use TRADING_MODE=paper or BINANCE_TESTNET=true."
+            )
 
     def __repr__(self) -> str:  # noqa: D105
         return (

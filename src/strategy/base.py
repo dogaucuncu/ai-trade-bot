@@ -150,6 +150,9 @@ class Position:
     strategy_name: str
     unrealized_pnl: float = 0.0
     position_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
+    # Exchange order id of the protective stop-loss resting on the exchange
+    # (live mode only). Cancelled before the engine market-closes the position.
+    stop_order_id: str | None = None
 
     # -- helpers -------------------------------------------------------------
 

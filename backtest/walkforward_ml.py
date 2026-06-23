@@ -36,7 +36,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import ssl
 import sys
 import time
 import urllib.request
@@ -56,6 +55,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 from backtest.metrics import PerformanceReport  # noqa: E402
 from src.indicators.technical import TechnicalIndicators  # noqa: E402
 from src.ml.lstm_model import LSTMPredictor  # noqa: E402
+from src.net import verified_ssl_context  # noqa: E402
 
 _RESULTS_DIR = _PROJECT_ROOT / "backtest" / "results"
 _INDICATOR_WARMUP = 250  # rows of history fed to predict() so indicators are valid
@@ -71,9 +71,8 @@ def fetch_klines(symbol: str, interval: str, total: int) -> pd.DataFrame:
     Returns a DataFrame indexed by UTC timestamp with OHLCV columns.
     """
     binance_symbol = symbol.replace("/", "")
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
+    # Verified TLS via the OS trust store (truststore) — no MITM exposure.
+    ctx = verified_ssl_context()
 
     rows: list[list[Any]] = []
     end_time: int | None = None

@@ -34,6 +34,7 @@ from typing import Any
 from loguru import logger
 
 from src.execution.order_manager import OrderManager, OrderType
+from src.net import verified_ssl_context
 from src.risk.circuit_breaker import BreakerState, CircuitBreaker
 from src.risk.manager import RiskManager
 from src.risk.position_sizer import PositionSizer
@@ -150,6 +151,10 @@ class BotEngine:
         # ---- executors (set up in initialize) ----------------------------
         self._binance_exec: Any = None
         self._alpaca_exec: Any = None
+        # Shared aiohttp session for the Binance public REST data feed. Reused
+        # across calls so we don't pay a fresh TCP+TLS handshake every fetch
+        # (created lazily in _fetch_data, closed in shutdown()).
+        self._http_session: Any = None
         # Unified data collector — used for the stock (Alpaca) data feed.
         # Crypto data still comes straight from Binance public REST in
         # _fetch_data; the collector is only needed for equities.
@@ -379,11 +384,20 @@ class BotEngine:
         symbols: list[str],
         timeframe: str,
     ) -> None:
-        """Run a single strategy across a list of symbols."""
-        for symbol in symbols:
+        """Run a single strategy across a list of symbols.
+
+        Market data for every symbol is fetched concurrently (network is the
+        slow part), then signals are processed sequentially so shared state
+        (open positions, risk budget) stays race-free.
+        """
+        frames = await asyncio.gather(
+            *(self._fetch_data(symbol, timeframe, limit=300) for symbol in symbols),
+            return_exceptions=True,
+        )
+
+        for symbol, df in zip(symbols, frames):
             try:
-                df = await self._fetch_data(symbol, timeframe, limit=300)
-                if df is None or df.empty:
+                if isinstance(df, Exception) or df is None or df.empty:
                     continue
 
                 # Add technical indicators before analysis
@@ -531,6 +545,10 @@ class BotEngine:
                 side=signal.action.value,
                 position_id=pos.position_id,
             )
+            # Place a protective stop-loss ON THE EXCHANGE so the position is
+            # covered even if this process crashes or loses connectivity. The
+            # in-process SL/TP polling in _monitor_positions is a second layer.
+            await self._place_protective_stop(pos, executor)
             await self._persist_open_position(pos, sizing.value_usd)
             logger.info(
                 "[engine] Position opened — {} {} ${:.2f}",
@@ -545,16 +563,67 @@ class BotEngine:
                 strategy=signal.strategy_name,
             )
 
+    async def _place_protective_stop(self, position: Position, executor: Any) -> None:
+        """Rest a stop-loss order on the exchange for *position* (live only).
+
+        Best-effort: a failure is logged but does not unwind the entry — the
+        in-process monitor still guards the position. The exchange order id is
+        stored on the position so it can be cancelled before a manual close.
+        """
+        close_side = "sell" if position.side == TradeAction.BUY else "buy"
+        try:
+            result = await executor.place_stop_loss(
+                position.symbol, close_side, position.quantity, position.stop_loss
+            )
+            position.stop_order_id = result.get("id") or result.get("order_id")
+            logger.info(
+                "[engine] Protective stop placed for {} @ {:.6f} — id={}",
+                position.symbol, position.stop_loss, position.stop_order_id,
+            )
+        except Exception:
+            logger.exception(
+                "[engine] Failed to place protective stop for {} — relying on "
+                "in-process monitor", position.symbol,
+            )
+
+    async def _cancel_protective_stop(self, position: Position, executor: Any) -> None:
+        """Cancel the resting exchange stop-loss for *position*, if any."""
+        if not position.stop_order_id:
+            return
+        try:
+            await executor.cancel_order(position.stop_order_id, position.symbol)
+            logger.debug(
+                "[engine] Cancelled protective stop {} for {}",
+                position.stop_order_id, position.symbol,
+            )
+        except Exception:
+            # Already filled/cancelled is fine — log and continue to close.
+            logger.warning(
+                "[engine] Could not cancel protective stop {} for {} "
+                "(may already be filled)", position.stop_order_id, position.symbol,
+            )
+        finally:
+            position.stop_order_id = None
+
     # ------------------------------------------------- position monitoring
 
     async def _monitor_positions(self) -> None:
-        """Check each open position for exit conditions and trailing stops."""
+        """Check each open position for exit conditions and trailing stops.
+
+        Prices for all open positions are fetched concurrently, then exits are
+        evaluated sequentially (closing mutates shared state).
+        """
         closed_ids: list[str] = []
 
-        for pid, pos in self._positions.items():
+        items = list(self._positions.items())
+        frames = await asyncio.gather(
+            *(self._fetch_data(pos.symbol, "1m") for _, pos in items),
+            return_exceptions=True,
+        )
+
+        for (pid, pos), df in zip(items, frames):
             try:
-                df = await self._fetch_data(pos.symbol, "1m")
-                if df is None or df.empty:
+                if isinstance(df, Exception) or df is None or df.empty:
                     continue
 
                 current_price = float(df["close"].iloc[-1])
@@ -602,6 +671,9 @@ class BotEngine:
         if not self.dry_run:
             executor = self._get_executor(position.symbol)
             if executor:
+                # Cancel the resting exchange stop first so it can't fire after
+                # we've already market-closed (which would open an opposite pos).
+                await self._cancel_protective_stop(position, executor)
                 close_side = "sell" if position.side == TradeAction.BUY else "buy"
                 try:
                     await executor.place_market_order(
@@ -641,15 +713,28 @@ class BotEngine:
 
     # -------------------------------------------------------- data fetching
 
+    async def _get_http_session(self) -> Any:
+        """Return a shared aiohttp session with verified TLS (lazy-created)."""
+        import aiohttp
+
+        if self._http_session is None or self._http_session.closed:
+            self._http_session = aiohttp.ClientSession(
+                connector=aiohttp.TCPConnector(
+                    ssl=verified_ssl_context(), limit=20
+                ),
+                timeout=aiohttp.ClientTimeout(total=15),
+            )
+        return self._http_session
+
     async def _fetch_data(
         self, symbol: str, timeframe: str, limit: int = 100
     ) -> Any:
         """Fetch OHLCV data directly from Binance Public REST API.
 
-        Uses aiohttp with ssl=False to bypass Windows SSL cert store issues.
-        Returns a pandas DataFrame or ``None`` on failure.
+        Uses a shared, TLS-verified aiohttp session (TLS routed through the OS
+        trust store via truststore — see src/net.py). Returns a pandas
+        DataFrame or ``None`` on failure.
         """
-        import aiohttp
         import pandas as pd
 
         if "/" not in symbol:
@@ -685,19 +770,14 @@ class BotEngine:
         )
 
         try:
-            # ssl=False: Windows system cert store may block verification;
-            # acceptable for dry-run / development. Use ssl=True in production
-            # with proper OS cert store.
-            async with aiohttp.ClientSession(
-                connector=aiohttp.TCPConnector(ssl=False)
-            ) as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
-                    if resp.status != 200:
-                        logger.warning(
-                            "[engine] Binance API returned {} for {}", resp.status, symbol
-                        )
-                        return None
-                    raw = await resp.json()
+            session = await self._get_http_session()
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    logger.warning(
+                        "[engine] Binance API returned {} for {}", resp.status, symbol
+                    )
+                    return None
+                raw = await resp.json()
 
             # Binance kline format: [open_time, open, high, low, close, volume, ...]
             df = pd.DataFrame(
@@ -1009,6 +1089,13 @@ class BotEngine:
                 await self._collector.close()
             except Exception:
                 logger.exception("Error closing data collector")
+
+        # Close the shared HTTP session used for the Binance data feed.
+        if self._http_session is not None and not self._http_session.closed:
+            try:
+                await self._http_session.close()
+            except Exception:
+                logger.exception("Error closing HTTP session")
 
         # Stop the notification email worker.
         if self.notifier:

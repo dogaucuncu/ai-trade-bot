@@ -112,13 +112,12 @@ async def _async_main(settings) -> None:  # noqa: ANN001
     from src.bot.engine import BotEngine
     from dashboard.app import app, state as dashboard_state
     import uvicorn
-    import ssl
-    import certifi
-    import os
-    
-    # Fix SSL certificate issues on Windows
-    os.environ['SSL_CERT_FILE'] = certifi.where()
-    
+
+    # NOTE: TLS trust is handled by truststore.inject_into_ssl() in main()
+    # (see _enable_os_trust_store). We deliberately do NOT set SSL_CERT_FILE to
+    # certifi here — on TLS-interception networks certifi's bundle fails, which
+    # is the exact problem truststore solves by using the OS certificate store.
+
     # In paper mode, we do a dry run (no actual orders sent to exchange unless using testnet)
     is_dry_run = (settings.trading_mode == "paper")
     
@@ -193,6 +192,10 @@ def main() -> None:
         settings.trading_mode = args.mode
     if args.verbose:
         settings.log_level = "DEBUG"
+
+    # Safety guard: refuse to arm real-money trading without explicit
+    # confirmation (evaluated after CLI overrides so --mode live is covered).
+    settings.assert_live_trading_allowed()
 
     settings.configure_logging()
 

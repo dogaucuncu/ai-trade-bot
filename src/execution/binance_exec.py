@@ -66,7 +66,7 @@ class BinanceExecutor:
                 "Install ccxt: pip install ccxt"
             )
 
-        self.api_key = api_key or os.getenv("BINANCE_API_KEY") or os.getenv("BINANCE_API_SECRET", "")
+        self.api_key = api_key or os.getenv("BINANCE_API_KEY", "")
         self.api_secret = api_secret or os.getenv("BINANCE_SECRET_KEY") or os.getenv("BINANCE_API_SECRET", "")
         self.testnet = testnet
         self.max_retries = max_retries

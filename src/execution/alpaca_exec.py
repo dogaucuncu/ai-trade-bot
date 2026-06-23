@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -286,10 +286,10 @@ class AlpacaExecutor:
         )
         if now_et.time() >= _MARKET_OPEN:
             # Already past open today, try next weekday
-            target = target.replace(day=target.day + 1)
+            target = target + timedelta(days=1)
 
         while target.weekday() >= 5:
-            target = target.replace(day=target.day + 1)
+            target = target + timedelta(days=1)
 
         return target.astimezone(timezone.utc)
 

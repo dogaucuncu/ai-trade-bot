@@ -20,18 +20,20 @@ from __future__ import annotations
 
 import asyncio
 import json
+import secrets
 import sys
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from loguru import logger
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.requests import Request
 
 # ── Project imports ─────────────────────────────────────────────────────
@@ -40,6 +42,44 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from config.settings import settings  # noqa: E402
+
+
+# =========================================================================
+# Auth / origin policy
+# =========================================================================
+# Control-endpoint token. Use the configured value, else mint a per-process
+# random one. The local UI receives it via the rendered page (same-origin), so
+# it keeps working; cross-site/CSRF callers cannot read it and are rejected.
+DASHBOARD_TOKEN: str = settings.dashboard_token or secrets.token_urlsafe(32)
+if not settings.dashboard_token:
+    logger.warning(
+        "[dashboard] No DASHBOARD_TOKEN configured — generated an ephemeral "
+        "token for this run. The local UI is authorized automatically; "
+        "external callers are blocked. Set DASHBOARD_TOKEN in config/.env for "
+        "a stable token."
+    )
+
+# Origins the browser UI may legitimately come from (same host, bound port).
+_ALLOWED_ORIGINS: list[str] = [
+    f"http://{settings.dashboard_host}:{settings.dashboard_port}",
+    f"http://127.0.0.1:{settings.dashboard_port}",
+    f"http://localhost:{settings.dashboard_port}",
+]
+# Host header values accepted (DNS-rebinding mitigation). Starlette compares the
+# hostname without the port.
+_ALLOWED_HOSTS: list[str] = list(
+    {settings.dashboard_host, "127.0.0.1", "localhost"}
+)
+
+
+def require_token(
+    x_dashboard_token: str | None = Header(default=None),
+) -> None:
+    """Reject state-changing calls that lack the correct dashboard token."""
+    if not secrets.compare_digest(x_dashboard_token or "", DASHBOARD_TOKEN):
+        raise HTTPException(
+            status_code=403, detail="Invalid or missing dashboard token"
+        )
 
 
 # =========================================================================
@@ -196,13 +236,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# -- CORS -----------------------------------------------------------------
+# -- Host / CORS hardening ------------------------------------------------
+# Reject requests with an unexpected Host header (DNS-rebinding defense).
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=_ALLOWED_HOSTS)
+
+# Lock CORS to the dashboard's own origin. No wildcard, no credentials — the
+# old ["*"] + allow_credentials let any website read account/position data.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_ALLOWED_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "X-Dashboard-Token"],
 )
 
 # -- Static files / templates --------------------------------------------
@@ -227,7 +272,11 @@ async def index(request: Request):
     response = templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"request": request, "version": "0.1.0"}
+        context={
+            "request": request,
+            "version": "0.1.0",
+            "dashboard_token": DASHBOARD_TOKEN,
+        },
     )
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     response.headers["Pragma"] = "no-cache"
@@ -431,7 +480,7 @@ async def api_performance() -> dict[str, Any]:
 # =========================================================================
 
 @app.post("/api/bot/start")
-async def api_bot_start() -> dict[str, Any]:
+async def api_bot_start(_: None = Depends(require_token)) -> dict[str, Any]:
     """Start the bot engine."""
     engine = state.engine
     if engine is None:
@@ -456,7 +505,7 @@ async def api_bot_start() -> dict[str, Any]:
 
 
 @app.post("/api/bot/stop")
-async def api_bot_stop() -> dict[str, Any]:
+async def api_bot_stop(_: None = Depends(require_token)) -> dict[str, Any]:
     """Stop the bot engine gracefully."""
     engine = state.engine
     if engine is None:
@@ -479,7 +528,7 @@ async def api_bot_stop() -> dict[str, Any]:
 
 
 @app.post("/api/bot/emergency-stop")
-async def api_emergency_stop() -> dict[str, Any]:
+async def api_emergency_stop(_: None = Depends(require_token)) -> dict[str, Any]:
     """Trigger the circuit breaker — close all positions immediately."""
     engine = state.engine
     if engine is None:
@@ -505,6 +554,16 @@ async def api_emergency_stop() -> dict[str, Any]:
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket) -> None:
     """WebSocket endpoint for real-time dashboard updates."""
+    # CORS does not apply to WebSockets, so a malicious page could otherwise
+    # open ws://127.0.0.1/ws and read live account/P&L data. Browsers always
+    # send an Origin header on WS handshakes; reject any that isn't ours.
+    # (Non-browser clients omit Origin and are allowed.)
+    origin = ws.headers.get("origin")
+    if origin is not None and origin not in _ALLOWED_ORIGINS:
+        await ws.close(code=1008)
+        logger.warning("[ws] Rejected connection from origin {}", origin)
+        return
+
     await ws_manager.connect(ws)
     try:
         # Send initial state on connect

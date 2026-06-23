@@ -31,6 +31,8 @@ from typing import Any
 import aiohttp
 from loguru import logger
 
+from src.net import verified_ssl_context
+
 # Keyless, public RSS feeds. Title-only parsing keeps it robust across feeds.
 _CRYPTO_RSS_FEEDS: tuple[str, ...] = (
     "https://www.coindesk.com/arc/outboundfeeds/rss/",
@@ -120,7 +122,7 @@ class NewsFeed:
         try:
             async with aiohttp.ClientSession(
                 timeout=_HTTP_TIMEOUT,
-                connector=aiohttp.TCPConnector(ssl=False),
+                connector=aiohttp.TCPConnector(ssl=verified_ssl_context()),
             ) as session:
                 for feed_url in _CRYPTO_RSS_FEEDS:
                     titles.extend(await self._fetch_one_rss(session, feed_url))
