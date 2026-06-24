@@ -479,20 +479,14 @@ class BotEngine:
                 )
                 return
 
-        # Position sizing
-        sizing = self.position_sizer.calculate(
-            balance=balance,
-            win_rate=max(0.40, self._get_strategy_win_rate(signal.strategy_name)),
-            avg_win=0.004,
-            avg_loss=0.003,
-            atr=signal.metadata.get("atr", 0.01),
-            price=signal.metadata.get(
-                "current_price",
-                (signal.take_profit_price + signal.stop_loss_price) / 2,
-            ),
-        )
+        # Position sizing — risk-based, scales with capital (Option A).
+        # Sizes by the actual stop-loss distance so max loss ≈ max_risk_per_trade
+        # of balance, then caps by per-position and total portfolio exposure
+        # (see RiskManager.calculate_position_size). Replaces the old Kelly path,
+        # which collapsed to the $5 minimum on every trade regardless of capital.
+        value_usd = self.risk_manager.calculate_position_size(signal, balance)
 
-        if sizing.value_usd <= 0:
+        if value_usd <= 0:
             logger.info("[engine] Position size = $0 for {} — skip", signal.symbol)
             return
 
@@ -502,7 +496,7 @@ class BotEngine:
                 "current_price",
                 (signal.take_profit_price + signal.stop_loss_price) / 2,
             )
-            units = sizing.value_usd / current_price if current_price > 0 else 0
+            units = value_usd / current_price if current_price > 0 else 0
             pos = Position(
                 symbol=signal.symbol,
                 side=signal.action,
@@ -516,14 +510,14 @@ class BotEngine:
             self._positions[pos.position_id] = pos
             self.risk_manager.register_open_position(
                 symbol=pos.symbol,
-                value=sizing.value_usd,
+                value=value_usd,
                 side=signal.action.value,
                 position_id=pos.position_id,
             )
-            await self._persist_open_position(pos, sizing.value_usd)
+            await self._persist_open_position(pos, value_usd)
             logger.info(
                 "[PAPER] Simulated {} {} — ${:.2f} @ {:.6f} conf={:.2f} SL={:.6f} TP={:.6f}",
-                signal.action.value, signal.symbol, sizing.value_usd,
+                signal.action.value, signal.symbol, value_usd,
                 current_price, signal.confidence,
                 signal.stop_loss_price, signal.take_profit_price,
             )
@@ -545,7 +539,7 @@ class BotEngine:
 
         order = await self.order_manager.place_order(
             signal=signal,
-            position_size_usd=sizing.value_usd,
+            position_size_usd=value_usd,
             executor=executor,
             order_type=OrderType.MARKET,
             balance=balance,
@@ -565,7 +559,7 @@ class BotEngine:
             self._positions[pos.position_id] = pos
             self.risk_manager.register_open_position(
                 symbol=pos.symbol,
-                value=sizing.value_usd,
+                value=value_usd,
                 side=signal.action.value,
                 position_id=pos.position_id,
             )
@@ -573,10 +567,10 @@ class BotEngine:
             # covered even if this process crashes or loses connectivity. The
             # in-process SL/TP polling in _monitor_positions is a second layer.
             await self._place_protective_stop(pos, executor)
-            await self._persist_open_position(pos, sizing.value_usd)
+            await self._persist_open_position(pos, value_usd)
             logger.info(
                 "[engine] Position opened — {} {} ${:.2f}",
-                signal.action.value, signal.symbol, sizing.value_usd,
+                signal.action.value, signal.symbol, value_usd,
             )
             await self._notify_trade(
                 action=signal.action.value,

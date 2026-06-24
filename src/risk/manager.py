@@ -246,7 +246,17 @@ class RiskManager:
         units = max_risk_usd / risk_per_unit
         position_usd = units * current_price
 
-        # Cap by portfolio exposure limit
+        # Per-position cap: an even share of the exposure budget so a single
+        # trade can't consume the whole allocation. With tight (~1.5%) stops the
+        # pure risk-based size exceeds available capital, so this cap is what
+        # actually sets the trade size — and it scales with balance (e.g. on
+        # $1000 with 30% exposure / 3 slots → ~$100/trade; on $50 → ~$5).
+        per_position_cap = balance * (
+            self.config.max_portfolio_exposure / max(1, self.config.max_open_positions)
+        )
+        position_usd = min(position_usd, per_position_cap)
+
+        # Cap by total portfolio exposure limit (across all open positions)
         max_exposure = balance * self.config.max_portfolio_exposure
         current_exposure = sum(p.get("value", 0) for p in self._open_positions)
         remaining_exposure = max(0, max_exposure - current_exposure)
