@@ -30,7 +30,7 @@ schedule==1.2.2               # Simple job scheduling
 apscheduler==3.11.2           # Advanced scheduling (cron-like)
 
 # --- Machine Learning ---
-torch==2.12.0                 # PyTorch deep-learning framework
+torch==2.13.0                 # PyTorch deep-learning framework
 scikit-learn==1.8.0           # MinMaxScaler, classification metrics
 transformers==5.8.1           # Hugging Face Transformers
 
