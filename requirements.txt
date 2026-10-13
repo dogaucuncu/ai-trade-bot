@@ -41,7 +41,7 @@ jinja2==3.1.6                 # HTML templating
 python-jose==3.5.0            # JWT authentication
 
 # --- Notifications ---
-aiosmtplib==5.1.1             # Async SMTP e-mail sending
+aiosmtplib==5.1.2             # Async SMTP e-mail sending
 
 # --- Visualization ---
 plotly==6.7.0                 # Interactive charting
